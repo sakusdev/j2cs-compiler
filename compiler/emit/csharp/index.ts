@@ -73,7 +73,10 @@ export function emitCSharp(program: CsProgram): string {
   }
   line(1, 'private static void Main()'); line(1, '{'); body(program.body, 2); line(1, '}');
   for (const fn of program.functions) {
-    line(0, ''); line(1, `private static JsValue ${ident(fn.name)}(${fn.params.map(p => `JsValue ${ident(p)}`).join(', ')})`);
+    const parameters = fn.argumentsParam
+      ? `JsArguments ${ident(fn.argumentsParam)}`
+      : fn.params.map(p => `JsValue ${ident(p)}`).join(', ');
+    line(0, ''); line(1, `private static JsValue ${ident(fn.name)}(${parameters})`);
     line(1, '{'); body(fn.body, 2); line(1, '}');
   }
   lines.push('}', ''); return lines.join('\n');
