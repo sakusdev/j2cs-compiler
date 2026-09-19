@@ -19,11 +19,14 @@ function bindingFacts(f: Facts, b: Binding): void {
   if (b.kind === 'intrinsic') f.prove('binding.globalProperty', b.name, 'Unshadowed intrinsic resolution')
     .prove('binding.intrinsic', `%${b.name}%`, 'Intrinsic binding identity');
 }
-function functionFacts(f: Facts): void {
+function functionFacts(f: Facts, simple = true, observesArguments = false): void {
   f.prove('function.kind', 'ordinary', 'Parser admits only ordinary declarations')
     .prove('function.scope', 'module', 'Binder admits only top-level module-local functions')
-    .prove('function.observes', [], 'Syntax/binding checks reject this, arguments, new.target, identity, properties, construction and escape')
-    .prove('function.parameters', 'simple', 'Parser rejects default/rest/optional/destructured parameters');
+    .prove('function.observes', observesArguments ? ['arguments'] : [],
+      observesArguments ? 'Implicit arguments binding is observed through the bounded JsArguments contract'
+        : 'Binding checks reject this, arguments, new.target, identity, properties, construction and escape')
+    .prove('function.parameters', simple ? 'simple' : 'non-simple',
+      simple ? 'No default/rest parameters in this specialization' : 'Default/rest parameter syntax is present');
 }
 function receiverFacts(f: Facts, e: SemanticExpr): void {
   if (e.kind !== 'member' && !(e.kind === 'call' && (e.target === 'array.push' || e.target === 'object.hasOwn'))) return;
@@ -77,8 +80,14 @@ export function expressionFacts(e: SemanticExpr): Facts {
     else if (e.target === 'object.hasOwn') f.prove('member.integrity', 'pristine', 'Direct unshadowed Object.hasOwn with static key')
       .prove('object.ownPropertyTest', true, 'JsObject/JsArray explicitly preserve own-property presence separately from undefined');
     else if (typeof e.target === 'number') {
-      functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
-        .prove('function.parameterCount', e.arity, 'Resolved declaration signature');
+      functionFacts(f, e.functionSimple ?? true, e.observesArguments ?? false);
+      const supplied = e.suppliedCount ?? e.args.length;
+      f.prove('call.argumentCount', supplied, 'Proven supplied argument count after bounded spread expansion')
+        .prove('function.parameterCount', e.arity, 'Resolved declaration signature')
+        .prove('function.formalsKnown', true, 'Direct function declaration and parameter list are statically resolved')
+        .prove('call.fewerThanFormals', supplied < e.arity, 'Supplied/formal count comparison')
+        .prove('call.moreThanFormals', supplied > e.arity, 'Supplied/formal count comparison')
+        .prove('call.spread', e.callKind === 'spread', 'Normalized call argument list records spread syntax');
     } else {
       f.prove('call.argumentCount', e.args.length, 'AST intrinsic argument count');
       const argument = e.args[0];
@@ -94,9 +103,21 @@ export function expressionFacts(e: SemanticExpr): Facts {
       }
     }
   }
+  if (e.kind === 'argumentsLength' || e.kind === 'argumentsIndex') {
+    bindingFacts(f, e.binding);
+    functionFacts(f, e.binding.function?.params.every(p => !p.initializer && !p.rest) ?? true, true);
+    f.prove('arguments.binding', 'implicit', 'Binder synthesized the current non-arrow function arguments binding')
+      .prove('arguments.lengthIntegrity', 'pristine', 'Arguments object mutation/escape is rejected by the bounded profile')
+      .prove('arguments.mapping', 'unmapped', 'Indexed reads are admitted only for non-simple parameter lists');
+  }
   receiverFacts(f, e);
   return f;
 }
+export function parameterFacts(kind: 'default' | 'rest'): Facts {
+  return programFacts()
+    .prove('parameter.default', kind === 'default', 'Normalized parameter declaration metadata')
+    .prove('parameter.rest', kind === 'rest', 'Normalized parameter declaration metadata');
+}
 export function declarationFacts(fn: SemanticFunction): Facts {
-  const f = programFacts(); functionFacts(f); bindingFacts(f, fn.binding); return f;
+  const f = programFacts(); functionFacts(f, fn.simpleParameters, fn.observesArguments); bindingFacts(f, fn.binding); return f;
 }
