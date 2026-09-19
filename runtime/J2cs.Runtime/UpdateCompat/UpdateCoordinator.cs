@@ -87,7 +87,7 @@ public sealed class UpdateCoordinator
         ArgumentNullException.ThrowIfNull(feedUri);
         if (!feedUri.IsAbsoluteUri) throw new ArgumentException("Updater feed URI must be absolute.", nameof(feedUri));
         if (State is not (UpdateState.Idle or UpdateState.FeedConfigured))
-            throw new InvalidOperationException(`Cannot configure updater feed while state is {State}.`);
+            throw new InvalidOperationException($"Cannot configure updater feed while state is {State}.");
         FeedUri = feedUri;
         State = UpdateState.FeedConfigured;
         Append("set-feed-url", feedUri.AbsoluteUri);
@@ -98,7 +98,7 @@ public sealed class UpdateCoordinator
         EnsureHostPreconditions();
         if (FeedUri is null) throw new InvalidOperationException("Updater feed must be configured before checking.");
         if (State != UpdateState.FeedConfigured)
-            throw new InvalidOperationException(`Cannot check for updates while state is {State}.`);
+            throw new InvalidOperationException($"Cannot check for updates while state is {State}.");
         State = UpdateState.Checking;
         Append("check-for-updates", null);
         return new UpdateHostAction(UpdateHostActionKind.CheckForUpdates, Mechanism, Channel, FeedUri, null);
@@ -107,7 +107,7 @@ public sealed class UpdateCoordinator
     public void MarkUpdateAvailable(string version)
     {
         if (State != UpdateState.Checking)
-            throw new InvalidOperationException(`Cannot report an available update while state is {State}.`);
+            throw new InvalidOperationException($"Cannot report an available update while state is {State}.");
         CandidateVersion = NormalizeVersion(version);
         State = UpdateState.Available;
         Append("update-available", CandidateVersion);
@@ -116,7 +116,7 @@ public sealed class UpdateCoordinator
     public void MarkUpdateDownloaded(string version)
     {
         if (State != UpdateState.Available)
-            throw new InvalidOperationException(`Cannot report a downloaded update while state is {State}.`);
+            throw new InvalidOperationException($"Cannot report a downloaded update while state is {State}.");
         var normalized = NormalizeVersion(version);
         if (!StringComparer.Ordinal.Equals(CandidateVersion, normalized))
             throw new InvalidOperationException("Downloaded version must match the previously reported candidate version.");
@@ -127,6 +127,7 @@ public sealed class UpdateCoordinator
 
     public UpdateHostAction PersistDownloadedForNextLaunch()
     {
+        EnsureHostPreconditions();
         if (State != UpdateState.Downloaded || DownloadedVersion is null)
             throw new InvalidOperationException("Only a downloaded update can be persisted for a later launch.");
         Append("persist-downloaded-update", DownloadedVersion);
@@ -140,6 +141,7 @@ public sealed class UpdateCoordinator
 
     public UpdateHostAction RequestQuitAndInstall()
     {
+        EnsureHostPreconditions();
         if (State != UpdateState.Downloaded || DownloadedVersion is null)
             throw new InvalidOperationException("quit-and-install requires a downloaded update.");
         State = UpdateState.InstallRequested;
@@ -160,6 +162,7 @@ public sealed class UpdateCoordinator
 
     public UpdateHostAction RequestRollback(string version)
     {
+        EnsureHostPreconditions();
         var normalized = NormalizeVersion(version);
         if (RollbackVersion is null || !StringComparer.Ordinal.Equals(RollbackVersion, normalized))
             throw new InvalidOperationException("Rollback is allowed only to the explicitly retained rollback point.");
