@@ -111,6 +111,13 @@ const fixtures: Fixture[] = [
     function makeObject() { return { value: 1 }; }
     console.log(makeObject() === makeObject());
   ` },
+  { name: 'closure-capture-type-widening', source: `
+    let x = 1;
+    function f() { return x + 1; }
+    console.log(f());
+    x = 'a';
+    console.log(f());
+  `, stdout: '2\na1\n' },
   { name: 'evaluation-order', source: `
     function mark(x) { console.log(x); return x; }
     function combine(a,b) { return a*10+b; }
