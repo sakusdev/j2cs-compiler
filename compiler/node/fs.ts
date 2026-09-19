@@ -41,7 +41,7 @@ export interface NodeFsRuleProof {
   facts: FactModel;
 }
 
-const byOperation = new Map(NODE_FS_RULES.map(spec => [spec.operation, spec]));
+const byOperation = new Map<NodeFsOperation, NodeFsRuleSpec>(NODE_FS_RULES.map(spec => [spec.operation, spec] as const));
 
 function contextFacts(context: NodeFsProofContext): Facts {
   const facts = new Facts()
