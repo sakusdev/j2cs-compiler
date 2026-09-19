@@ -35,6 +35,7 @@ readable.on('end', () => console.log('end'));
 console.log(readable.push(Buffer.from([1])));
 console.log(readable.read().toString('hex'));
 readable.push(null);
+readable.read();
 
 const writable = new Writable({
   highWaterMark: 1,
