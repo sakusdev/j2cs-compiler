@@ -9,17 +9,17 @@ public static class JsCoercion
         JsKind.Boolean => value.Boolean ? "true" : "false",
         JsKind.String => value.String,
         JsKind.Number => JsNumber.Format(value.Number),
+        JsKind.Object => throw new InvalidOperationException("Object ToPrimitive/ToString is intentionally not implemented"),
         _ => throw new InvalidOperationException("Unknown value tag")
     };
 
-    // The Add helper reaches this only after ruling out String. This is deliberately not
-    // a general ToNumber implementation: string grammar, objects, Symbol and BigInt are deferred.
     internal static double ToNumberNonString(JsValue value) => value.Kind switch
     {
         JsKind.Number => value.Number,
         JsKind.Boolean => value.Boolean ? 1d : 0d,
         JsKind.Null => 0d,
         JsKind.Undefined => double.NaN,
+        JsKind.Object => throw new InvalidOperationException("Object ToPrimitive/ToNumber is intentionally not implemented"),
         _ => throw new InvalidOperationException("Non-string primitive required")
     };
 }

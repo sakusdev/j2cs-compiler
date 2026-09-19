@@ -41,6 +41,20 @@ const fixtures: Fixture[] = [
     if (v) console.log('joined-truthy'); console.log(v === 5);
     let w = 1; if (false) w = 's'; console.log(w + 1);
   ` },
+  { name: 'objects-arrays-own-data', source: `
+    let tick=0;
+    const o={a:(tick=1),a:(tick=2),b:3}; const alias=o;
+    console.log(tick,o.a,o.b);
+    console.log(o===alias,o==={a:2},Object.hasOwn(o,'a'),Object.hasOwn(o,'missing'));
+    o.c=4; console.log(o.c);
+    const a=[1,,undefined];
+    console.log(a.length,Object.hasOwn(a,0),Object.hasOwn(a,1),Object.hasOwn(a,2));
+    console.log(a[1]===undefined,a[2]===undefined);
+    a[1]=undefined; console.log(Object.hasOwn(a,1),a.length);
+    a[4]=5; console.log(a.length,Object.hasOwn(a,3),a[4]);
+    console.log(a.push(6,undefined),a.length,Object.hasOwn(a,6),a[5],a[6]===undefined);
+    console.log(a===a,a===[]); console.log(!a); if(a) console.log('array-truthy');
+  ` },
   { name: 'functions-and-returns', source: `
     console.log(add(10, 20));
     function add(a, b) { return a + b; }
@@ -85,6 +99,11 @@ for (const fixture of fixtures) {
     if (fixture.name === 'required-mvp') {
       assert.ok(r.result.trace.some(t => t.ruleId === 'operators.addition.number' && t.strategy === 'native'));
       assert.ok(!/\bdynamic\b|\bobject\b/.test(r.result.source));
+    }
+    if (fixture.name === 'objects-arrays-own-data') {
+      assert.ok(r.result.trace.some(t => t.ruleId === 'array.length.read'));
+      assert.ok(r.result.trace.some(t => t.ruleId === 'array.prototype.push'));
+      assert.ok(r.result.trace.some(t => t.ruleId === 'object.has-own'));
     }
   });
 }

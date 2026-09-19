@@ -52,9 +52,9 @@ structured diagnostics including source location and failed rule proofs.
 | Intrinsic values | Unshadowed `undefined`, `NaN`, `Infinity` |
 | Variables | Block-scoped `const` / `let`, binding resolution, local `=`; omitted `let` initializer becomes undefined |
 | Arithmetic | Number `+ - * / %`, unary `-`; primitive String concatenation and coercing primitive `+` |
-| Comparisons | Number `< <= > >=`; primitive `===` / `!==` |
+| Comparisons | Number `< <= > >=`; primitive and Object/Array identity `===` / `!==` |
 | Statements | Expression statements, blocks, `if` / `else`, `return`, empty statements |
-| Conditions | JavaScript primitive truthiness and `!` |
+| Objects / arrays | Ordinary static data properties, sparse array literals, static string/index reads and writes, `length`, builtin `push`, `Object.hasOwn`, identity |\n| Conditions | JavaScript truthiness and `!`, including Object/Array truthiness |
 | Functions | Top-level ordinary declarations; known direct calls, exact arity, primitive parameters/results, hoisting, bare/fallthrough return |
 | TypeScript | Erasable scalar variable/parameter/return annotations; annotations are **not** trusted as runtime facts |
 | Host output | `console.log` for primitives; multiple arguments when the first is proven non-String or a literal String without `%` |
@@ -96,7 +96,7 @@ compiler/ir/              semantic IR and typed C# emission IR
 compiler/lowering/        guarded rule dispatch and compatibility calls
 compiler/diagnostics/     explicit source diagnostics
 compiler/emit/            C# emitter and standalone project generation
-runtime/J2cs.Runtime/     tagged primitive values and canonical helpers
+runtime/J2cs.Runtime/     tagged values, JsObject/JsArray, and canonical helpers
 rule-db/                  pinned j2cs Git submodule; upstream owns the rules
 tests/compiler/           binding, diagnostics, rule/proof infrastructure tests
 tests/differential/       Node vs generated C# executable comparisons

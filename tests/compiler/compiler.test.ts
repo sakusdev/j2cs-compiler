@@ -24,6 +24,18 @@ test('rule DB is loaded/indexed and primitive proof gates native addition', () =
   assert.ok(mixed.trace.some(t => t.ruleId === 'operators.addition.dynamic' && t.strategy === 'helper'));
   assert.ok(!mixed.trace.some(t => t.ruleId === 'operators.addition.number'));
 });
+test('object/array core selects canonical safe rules and preserves identity in emitted runtime calls', () => {
+  const r = compile(`
+    const o={a:1}; const alias=o; const a=[1,,undefined];
+    a[1]=undefined; a.push(2); console.log(a.length,Object.hasOwn(a,1),o===alias,o==={a:1});
+  `, index);
+  assert.ok(r.trace.some(t => t.ruleId === 'array.length.read' && t.requirements.verdict === 'proven'));
+  assert.ok(r.trace.some(t => t.ruleId === 'array.prototype.push' && t.requirements.verdict === 'proven'));
+  assert.ok(r.trace.some(t => t.ruleId === 'object.has-own' && t.requirements.verdict === 'proven'));
+  assert.ok(r.trace.some(t => t.ruleId === 'operators.strict-equality.dynamic' && t.requirements.verdict === 'proven'));
+  assert.match(r.source, /JsObject\.Create\(\)/); assert.match(r.source, /JsArray\.Create\(3d\)/);
+  assert.ok(!/\bdynamic\b|\bobject\b/.test(r.source));
+});
 test('type annotations are not semantic evidence', () => {
   const r = compile("const x: number = 'a'; console.log(x + 1);", index, 'input.ts');
   assert.ok(r.trace.some(t => t.ruleId === 'operators.addition.dynamic'));
@@ -36,10 +48,17 @@ const diagnostics: [string, string, string][] = [
   ['parse error', 'const = ;', 'E_PARSE'],
   ['var', 'var x = 1;', 'E_UNSUPPORTED_SYNTAX'],
   ['loop', 'while (true) {}', 'E_UNSUPPORTED_SYNTAX'],
-  ['array', 'const x = [];', 'E_UNSUPPORTED_SYNTAX'],
-  ['object', 'const x = {};', 'E_UNSUPPORTED_SYNTAX'],
   ['bigint', 'const x = 1n;', 'E_UNSUPPORTED_SYNTAX'],
   ['loose equality', 'console.log(1 == true);', 'E_UNSUPPORTED_SYNTAX'],
+  ['dynamic computed property', "const o={x:1}; const k='x'; console.log(o[k]);", 'E_UNSUPPORTED_SYNTAX'],
+  ['object proto literal', 'const x={__proto__: null};', 'E_UNSUPPORTED_SYNTAX'],
+  ['prototype read', 'const x={}; console.log(x.toString);', 'E_PROTOTYPE_PROPERTY'],
+  ['prototype mutation', 'const x={}; x.__proto__={};', 'E_PROTOTYPE_MUTATION'],
+  ['array length write', 'const x=[]; x.length=4;', 'E_ARRAY_LENGTH_WRITE'],
+  ['array method override', 'const x=[]; x.push=1; x.push(2);', 'E_ARRAY_METHOD_OVERRIDDEN'],
+  ['object coercing addition', "const x={}; console.log('x'+x);", 'E_NO_SAFE_RULE'],
+  ['console object inspection', 'console.log({a:1});', 'E_CONSOLE_OBJECT'],
+  ['object function boundary', 'function f(){ return {}; } f();', 'E_OBJECT_FUNCTION_BOUNDARY'],
   ['optional chain', 'console?.log(1);', 'E_UNSUPPORTED_SYNTAX'],
   ['const without initializer', 'const x;', 'E_CONST_INIT'],
   ['const write', 'const x = 1; x = 2;', 'E_IMMUTABLE_WRITE'],
@@ -53,7 +72,7 @@ const diagnostics: [string, string, string][] = [
   ['console shadow', 'const console = 1; console.log(2);', 'E_INTRINSIC_SHADOWED'],
   ['console future shadow', 'console.log(2); const console = 1;', 'E_INTRINSIC_SHADOWED'],
   ['console reassignment', 'console = 1;', 'E_IMMUTABLE_WRITE'],
-  ['console property override', 'console.log = 1;', 'E_UNSUPPORTED_SYNTAX'],
+  ['console property override', 'console.log = 1;', 'E_INTRINSIC_MUTATION'],
   ['console escape', 'const c = console;', 'E_INTRINSIC_ESCAPE'],
   ['format string', "console.log('%d', 2);", 'E_CONSOLE_FORMAT'],
   ['unknown format string', "const fmt = 'x'; console.log(fmt, 2);", 'E_CONSOLE_FORMAT'],

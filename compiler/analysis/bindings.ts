@@ -8,7 +8,7 @@ export interface Bindings {
   references: Map<number, Binding>; declarations: Map<number, Binding>; functions: Binding[];
 }
 interface Scope { parent?: Scope; owner: number; names: Map<string, Binding> }
-const intrinsics = ['undefined', 'NaN', 'Infinity', 'console'];
+const intrinsics = ['undefined', 'NaN', 'Infinity', 'console', 'Object'];
 export function resolveBindings(program: Program): Bindings {
   let nextId = 0;
   const references = new Map<number, Binding>(), declarations = new Map<number, Binding>(), functions: Binding[] = [];
@@ -27,7 +27,7 @@ export function resolveBindings(program: Program): Bindings {
     while (s && !(b = s.names.get(n.name))) s = s.parent;
     if (!b) fail('E_UNRESOLVED_BINDING', `Unresolved identifier '${n.name}'.`, n.span);
     if (b.owner !== scope.owner && b.kind !== 'function' && b.kind !== 'intrinsic')
-      fail('E_CAPTURE', `Capture of '${n.name}' needs closure/TDZ analysis, which is not implemented.`, n.span);
+      fail('E_CAPTURE', `Capture of '${b.name}' needs closure/TDZ analysis, which is not implemented.`, n.span);
     references.set(n.id, b); return b;
   }
   function expr(n: Expr, s: Scope, use: 'value' | 'callee' | 'receiver' = 'value'): void {
@@ -36,25 +36,32 @@ export function resolveBindings(program: Program): Bindings {
       case 'identifier': {
         const b = resolve(n, s);
         if (b.kind === 'function' && use !== 'callee') fail('E_FUNCTION_VALUE', 'Function identity/escape is unsupported; use a direct call.', n.span);
-        if (b.kind === 'intrinsic' && b.name === 'console' && use !== 'receiver') fail('E_INTRINSIC_ESCAPE', 'console may only be used as the direct receiver of console.log.', n.span);
+        if (b.kind === 'intrinsic' && ['console', 'Object'].includes(b.name) && use !== 'receiver')
+          fail('E_INTRINSIC_ESCAPE', `${b.name} may only be used as the direct receiver of a supported intrinsic call.`, n.span);
         return;
       }
+      case 'object': n.properties.forEach(p => expr(p.value, s)); return;
+      case 'array': n.elements.forEach(e => { if (e) expr(e, s); }); return;
       case 'binary': expr(n.left, s); expr(n.right, s); return;
       case 'unary': expr(n.operand, s); return;
       case 'assign': {
-        const b = resolve(n.target, s);
-        if (b.kind !== 'let' && b.kind !== 'parameter') fail('E_IMMUTABLE_WRITE', `Assignment to '${b.name}' is unsupported (${b.kind}).`, n.span);
+        if (n.target.kind === 'identifier') {
+          const b = resolve(n.target, s);
+          if (b.kind !== 'let' && b.kind !== 'parameter') fail('E_IMMUTABLE_WRITE', `Assignment to '${b.name}' is unsupported (${b.kind}).`, n.span);
+        } else {
+          expr(n.target.object, s, 'receiver');
+          if (n.target.object.kind === 'identifier') {
+            const b = references.get(n.target.object.id)!;
+            if (b.kind === 'intrinsic') fail('E_INTRINSIC_MUTATION', `Mutation of intrinsic '${b.name}' is outside the closed profile.`, n.span);
+          }
+        }
         expr(n.value, s); return;
       }
-      case 'member':
-        if (use !== 'callee' || n.property !== 'log' || n.object.kind !== 'identifier')
-          fail('E_MEMBER', 'Only direct console.log member calls are supported.', n.span);
-        expr(n.object, s, 'receiver'); return;
+      case 'member': expr(n.object, s, 'receiver'); return;
       case 'call': expr(n.callee, s, 'callee'); n.args.forEach(a => expr(a, s)); return;
     }
   }
   function body(nodes: Statement[], s: Scope, top = false): void {
-    // Predeclare the complete lexical scope before resolving any reference (including shadowed intrinsics).
     for (const n of nodes) {
       if (n.kind === 'variable') declare(s, n, n.name, n.mode);
       if (n.kind === 'function') {

@@ -7,7 +7,7 @@ const facts = new Facts().type('left', ['Number'], 'inferred lhs').type('right',
   .prove('binding.intrinsic', '%Number%', 'binder').prove('member.integrity', 'pristine', 'effect analysis')
   .prove('callback.identity', 'function:42', 'call target resolution')
   .prove('profile.host', 'Node.js', 'selected profile').prove('profile.platform', 'linux', 'selected profile')
-  .prove('operands.domain', 'primitive', 'closed value domain');
+  .prove('operands.domain', 'primitive', 'closed value domain').prove('operands.complete', true, 'tagged runtime domain');
 test('known legacy requirements are evaluated from common facts', () => {
   assert.equal(evaluateRequirements({ left_type: 'Number', right_type: 'Number', no_to_primitive_required: true }, facts).verdict, 'proven');
   assert.equal(evaluateRequirements({ left_type: 'String' }, facts).verdict, 'disproven');
@@ -19,6 +19,18 @@ test('intrinsic, callback, member and platform predicates share the fact model',
     property_not_overridden: true, platform: 'linux', host: 'Node.js' }, facts).verdict, 'proven');
   assert.equal(evaluateRequirements({ electron_profile: 'renderer' }, facts).verdict, 'unknown');
   assert.equal(evaluateRequirements({ platform: 'win32' }, facts).verdict, 'disproven');
+});
+test('array/object core requirements are proven only from explicit representation facts', () => {
+  const array = new Facts(facts).type('receiver', ['Array'], 'flow receiver')
+    .prove('receiver.proxy', false, 'closed profile').prove('receiver.representation', 'JsArray', 'runtime representation')
+    .prove('receiver.indexedDataOnly', true, 'runtime representation').prove('intrinsics.arrayPrototypeIndexed', false, 'pristine prototype')
+    .prove('object.ownPropertyTest', true, 'presence-aware storage');
+  assert.equal(evaluateRequirements({ receiver_inferred_as_builtin_array: true, receiver_not_proxy: true,
+    representation_exposes_exact_js_length: true }, array).verdict, 'proven');
+  assert.equal(evaluateRequirements({ builtin_method_not_overridden: true, no_indexed_accessors_or_nonconfigurable_elements: true,
+    no_indexed_prototype_properties: true }, array).verdict, 'proven');
+  assert.equal(evaluateRequirements({ object_representation_supports_own_property_test: true }, array).verdict, 'proven');
+  assert.equal(evaluateRequirements({ receiver_inferred_as_builtin_array: true }, facts).verdict, 'unknown');
 });
 test('structured versioned predicates preserve three-valued logic', () => {
   const r = evaluateRequirements({ $j2cs: { version: 1, predicate: { all: [

@@ -19,15 +19,25 @@ export function parse(source: string, file = 'input.js'): Program {
       { file, start, end: start + (d.length ?? 0), line: lc.line + 1, column: lc.character + 1 });
   }
   function unsupported(n: ts.Node, description = ts.SyntaxKind[n.kind]): never {
-    return fail('E_UNSUPPORTED_SYNTAX', `${description} is not supported by the primitive compiler profile.`, meta(n).span);
+    return fail('E_UNSUPPORTED_SYNTAX', `${description} is not supported by the current compiler profile.`, meta(n).span);
   }
   function annotation(n: ts.TypeNode | undefined): void {
     if (!n) return;
     if (!file.endsWith('.ts')) unsupported(n, 'Type annotation in JavaScript');
-    // Purely erasable scalar annotations only. They do not narrow runtime facts.
     if (![ts.SyntaxKind.NumberKeyword, ts.SyntaxKind.StringKeyword, ts.SyntaxKind.BooleanKeyword,
       ts.SyntaxKind.AnyKeyword, ts.SyntaxKind.UnknownKeyword, ts.SyntaxKind.VoidKeyword,
       ts.SyntaxKind.UndefinedKeyword].includes(n.kind)) unsupported(n, 'This TypeScript annotation');
+  }
+  function propertyName(n: ts.PropertyName): string {
+    if (ts.isComputedPropertyName(n)) unsupported(n, 'Computed property name');
+    if (ts.isIdentifier(n) || ts.isStringLiteral(n)) return n.text;
+    if (ts.isNumericLiteral(n)) return String(Number(n.text));
+    return unsupported(n, 'Property name');
+  }
+  function elementProperty(n: ts.Expression): string {
+    if (ts.isStringLiteral(n)) return n.text;
+    if (ts.isNumericLiteral(n)) return String(Number(n.text));
+    return unsupported(n, 'Dynamic computed property key');
   }
   function expr(n: ts.Expression): Expr {
     const m = meta(n);
@@ -38,11 +48,28 @@ export function parse(source: string, file = 'input.js'): Program {
       return { ...m, kind: 'literal', value: n.kind === ts.SyntaxKind.TrueKeyword };
     if (n.kind === ts.SyntaxKind.NullKeyword) return { ...m, kind: 'literal', value: null };
     if (ts.isIdentifier(n)) return { ...m, kind: 'identifier', name: n.text };
+    if (ts.isObjectLiteralExpression(n)) {
+      const properties = n.properties.map(p => {
+        if (!ts.isPropertyAssignment(p)) unsupported(p, 'Object spread/shorthand/method/accessor');
+        const key = propertyName(p.name);
+        if (key === '__proto__') unsupported(p.name, 'Object-literal __proto__ prototype mutation');
+        return { key, value: expr(p.initializer) };
+      });
+      return { ...m, kind: 'object', properties };
+    }
+    if (ts.isArrayLiteralExpression(n)) {
+      const elements = n.elements.map(e => {
+        if (ts.isOmittedExpression(e)) return null;
+        if (ts.isSpreadElement(e)) unsupported(e, 'Array spread');
+        return expr(e);
+      });
+      return { ...m, kind: 'array', elements };
+    }
     if (ts.isBinaryExpression(n)) {
       const op = n.operatorToken.getText(sf);
       if (op === '=') {
         const target = expr(n.left);
-        if (target.kind !== 'identifier') unsupported(n.left, 'Property/destructuring assignment');
+        if (target.kind !== 'identifier' && target.kind !== 'member') unsupported(n.left, 'Destructuring/unsupported assignment target');
         return { ...m, kind: 'assign', target, value: expr(n.right) };
       }
       if (!['+', '-', '*', '/', '%', '<', '<=', '>', '>=', '===', '!=='].includes(op)) unsupported(n, `Operator ${op}`);
@@ -56,6 +83,10 @@ export function parse(source: string, file = 'input.js'): Program {
     if (ts.isPropertyAccessExpression(n)) {
       if (n.questionDotToken) unsupported(n, 'Optional property access');
       return { ...m, kind: 'member', object: expr(n.expression), property: n.name.text };
+    }
+    if (ts.isElementAccessExpression(n)) {
+      if (n.questionDotToken || !n.argumentExpression) unsupported(n, 'Optional/empty element access');
+      return { ...m, kind: 'member', object: expr(n.expression), property: elementProperty(n.argumentExpression) };
     }
     if (ts.isCallExpression(n)) {
       if (n.questionDotToken || n.typeArguments?.length) unsupported(n, 'Optional/generic call');
@@ -81,7 +112,6 @@ export function parse(source: string, file = 'input.js'): Program {
     if (ts.isExpressionStatement(n)) return [{ ...m, kind: 'expression', expression: expr(n.expression) }];
     if (ts.isEmptyStatement(n)) return [{ ...m, kind: 'empty' }];
     if (ts.isIfStatement(n)) {
-      // Lexical declarations in a single-statement arm are early errors in JavaScript.
       for (const arm of [n.thenStatement, n.elseStatement]) {
         if (arm && (ts.isVariableStatement(arm) || ts.isFunctionDeclaration(arm))) unsupported(arm, 'Unbraced lexical/function declaration');
       }
@@ -105,9 +135,6 @@ export function parse(source: string, file = 'input.js'): Program {
     return unsupported(n);
   }
   const body = sf.statements.flatMap(statement);
-  // TypeScript's parser accepts some early-error programs. V8 provides a syntax-only
-  // grammar check; Script construction NEVER evaluates the input. Only the admitted,
-  // erasable TS subset is transpiled here, solely for this grammar check.
   const javascript = file.endsWith('.ts') ? ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText : source;
