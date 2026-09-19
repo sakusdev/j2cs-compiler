@@ -41,6 +41,18 @@ const fixtures: Fixture[] = [
     if (v) console.log('joined-truthy'); console.log(v === 5);
     let w = 1; if (false) w = 's'; console.log(w + 1);
   ` },
+  { name: 'primitive-coercion-equality-globals', source: `
+    console.log(null == undefined, null == 0, false == 0, true == 1);
+    console.log('' == 0, '   ' == 0, '0x10' == 16, Infinity == 'Infinity');
+    console.log(NaN == NaN, NaN != NaN, undefined != null);
+    console.log(+'', +'   ', +'0x10', +'0b11', +'0o10', +true, +null, +undefined);
+    console.log(+'Infinity', +'-Infinity', +'not-a-number', 1 / +'-0');
+    console.log('2' < 10, '20' < '3', '2' >= 2, null <= 0, undefined < 1, 'x' > 0);
+    console.log(isFinite(''), isFinite('3'), isFinite(undefined), isFinite(Infinity));
+    console.log(isNaN('x'), isNaN(''), isNaN(undefined), isNaN(NaN));
+    console.log(parseFloat('  -1.25e2px'), parseFloat('0x10'), parseFloat(undefined));
+    console.log(parseInt('  -12px'), parseInt('0x10'), parseInt('1012', 2), parseInt(15.9, 10));
+  ` },
   { name: 'objects-arrays-own-data', source: `
     let tick=0;
     const o={a:(tick=1),a:(tick=2),b:3}; const alias=o;
