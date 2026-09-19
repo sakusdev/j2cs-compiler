@@ -79,7 +79,8 @@ type checker and does not report all TypeScript type errors.
 regex and never interpolates `target.template`. `compiler/rules/adapters.json`
 contains 29 reviewed mappings from **existing rule IDs** to normalized AST
 selectors and implemented lowering opcodes. Each adapter pins the full rule
-file's SHA-256. A missing/changed reviewed rule is an error, not an opportunity
+file's SHA-256 after CRLF-to-LF normalization for cross-platform Git checkouts.
+A missing/changed reviewed rule is an error, not an opportunity
 to reuse stale assumptions. Review changes before updating fingerprints; do not
 blindly regenerate them. Unadapted rules load and index normally but do not
 claim executable support.

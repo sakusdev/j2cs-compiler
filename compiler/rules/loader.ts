@@ -35,7 +35,9 @@ export async function loadRules(root: string): Promise<RuleDatabase> {
     try { rule = JSON.parse(text); } catch { return fail('E_RULE_JSON', `Invalid rule JSON: ${file}`); }
     if (!validate(rule)) fail('E_RULE_SCHEMA', `Invalid rule schema: ${file}`, undefined, validate.errors);
     if (db.byId.has(rule.id)) fail('E_RULE_DUPLICATE', `Duplicate rule ID: ${rule.id}`);
-    const loaded = { rule, file: path.relative(root, file), sha256: createHash('sha256').update(text).digest('hex') };
+    // Git may materialize text files as CRLF on Windows. JSON whitespace has no
+    // semantic effect; preserve the reviewed LF fingerprint across checkouts.
+    const loaded = { rule, file: path.relative(root, file), sha256: createHash('sha256').update(text.replace(/\r\n/g, '\n')).digest('hex') };
     db.byId.set(rule.id, loaded);
     for (const [index, key] of [[db.byCategory, rule.category], [db.byStrategy, rule.strategy]] as const) {
       // Both indexes contain the same immutable loaded records.

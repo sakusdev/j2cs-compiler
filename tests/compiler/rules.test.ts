@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, copyFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, copyFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ROOT } from '../../compiler/index.js';
@@ -60,5 +60,22 @@ test('loader enforces upstream schema and duplicate IDs', async () => {
     await assert.rejects(loadRules(root), /Duplicate rule ID/);
     await writeFile(path.join(root, 'rules/two.json'), JSON.stringify({ ...rule, id: 'fixture.two', strategy: 'incorrect' }));
     await assert.rejects(loadRules(root), /Invalid rule schema/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('CRLF checkouts retain reviewed hashes while rule content changes invalidate them', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'j2cs-newlines-'));
+  try {
+    await mkdir(path.join(root, 'schema')); await mkdir(path.join(root, 'rules'));
+    await copyFile(path.join(ROOT, 'rule-db/schema/rule.schema.json'), path.join(root, 'schema/rule.schema.json'));
+    const original = (await readFile(path.join(ROOT, 'rule-db/rules/operators/addition-number.json'), 'utf8')).replace(/\r\n/g, '\n');
+    const file = path.join(root, 'rules/addition.json');
+    await writeFile(file, original);
+    const lf = (await loadRules(root)).byId.get('operators.addition.number')!;
+    await writeFile(file, original.replace(/\n/g, '\r\n'));
+    const crlf = (await loadRules(root)).byId.get('operators.addition.number')!;
+    assert.equal(crlf.sha256, lf.sha256);
+    await writeFile(file, original.replace('"left_type":"Number"', '"left_type":"String"'));
+    assert.notEqual((await loadRules(root)).byId.get('operators.addition.number')!.sha256, lf.sha256);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
