@@ -249,8 +249,11 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   function expression(n: Expr, f: Flow): SE {
     switch (n.kind) {
       case 'literal': return { ...n, types: literalType(n.value) };
+      case 'functionExpr': {
+        const binding = bindings.declarations.get(n.id)!;
+        return withValue({ ...n, kind: 'functionValue' as const, binding }, functionValue(binding));
+      }
       case 'object': {
-        if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
         if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Object allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
         const ref = n.id, shape: Shape = { kind: 'Object', properties: new Map() };
         f.heap.set(ref, shape);
@@ -260,7 +263,6 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         return { ...n, kind: 'object', properties, types: ['Object'], refs: [ref] };
       }
       case 'array': {
-        if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Array literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
         if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Array allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
         const ref = n.id, shape: Shape = { kind: 'Array', length: n.elements.length, properties: new Map() };
         f.heap.set(ref, shape);
@@ -287,7 +289,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         if (n.target.kind === 'identifier') {
           const binding = bindings.references.get(n.target.id)!;
           readType(binding, n.target, f);
-          const value = expression(n.value, f); f.env.set(binding.id, valueOf(value));
+          const value = expression(n.value, f); f.env.set(binding.id, valueOf(value)); record(binding, valueOf(value));
           return withValue({ ...n, kind: 'assign' as const, binding, value }, valueOf(value));
         }
         const object = expression(n.target.object, f), value = expression(n.value, f);
@@ -298,13 +300,13 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         const binding = bindings.references.get(n.target.id)!;
         const left = readType(binding, n.target, f), value = expression(n.value, f);
         const types = n.op === '+=' ? addTypes(left.types, value.types) : ['Number'] as TypeSet;
-        f.env.set(binding.id, { types });
+        const next = { types } as ValueInfo; f.env.set(binding.id, next); record(binding, next);
         return { ...n, binding, leftTypes: left.types, value, types };
       }
       case 'update': {
         const binding = bindings.references.get(n.target.id)!;
         const operand = readType(binding, n.target, f), types: TypeSet = ['Number'];
-        f.env.set(binding.id, { types });
+        const next = { types } as ValueInfo; f.env.set(binding.id, next); record(binding, next);
         return { ...n, binding, operandTypes: operand.types, types };
       }
       case 'member': {
@@ -323,7 +325,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
             if (binding?.kind === 'intrinsic' && binding.name === 'console' && n.callee.property === 'log') {
               const args = n.args.map(a => expression(a, f));
               if (args.some(a => hasReference(a.types)))
-                fail('E_CONSOLE_OBJECT', 'Object/Array console inspection is outside the primitive console host contract.', n.span);
+                fail('E_CONSOLE_OBJECT', 'Object/Array/Function console inspection is outside the primitive console host contract.', n.span);
               if (args.length > 1 && args[0]!.types.includes('String')) {
                 const first = args[0]!;
                 if (first.kind !== 'literal' || typeof first.value !== 'string' || first.value.includes('%'))
@@ -360,21 +362,30 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
           }
           fail('E_INDIRECT_CALL', `Member call '.${n.callee.property}' is not a proven supported intrinsic.`, n.span);
         }
-        if (n.callee.kind !== 'identifier') fail('E_INDIRECT_CALL', 'Only statically resolved direct calls are supported.', n.span);
-        const binding = bindings.references.get(n.callee.id)!;
-        if (binding.kind === 'intrinsic') {
-          if (!['isFinite', 'isNaN', 'parseFloat', 'parseInt'].includes(binding.name))
-            fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
-          const target = binding.name as 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt';
-          const args = n.args.map(a => expression(a, f));
-          const validArity = target === 'parseInt' ? args.length === 1 || args.length === 2 : args.length === 1;
-          if (!validArity) fail('E_ARITY', `Intrinsic ${target} is currently supported only at its reviewed arity.`, n.span);
-          return { ...n, kind: 'call', binding, target, args, arity: args.length,
-            types: target === 'isFinite' || target === 'isNaN' ? ['Boolean'] : ['Number'] };
+        if (n.callee.kind === 'identifier') {
+          const direct = bindings.references.get(n.callee.id)!;
+          if (direct.kind === 'intrinsic') {
+            if (!['isFinite', 'isNaN', 'parseFloat', 'parseInt'].includes(direct.name))
+              fail('E_INDIRECT_CALL', `Calling '${direct.name}' requires callable runtime support.`, n.span);
+            const target = direct.name as 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt';
+            const args = n.args.map(a => expression(a, f));
+            const validArity = target === 'parseInt' ? args.length === 1 || args.length === 2 : args.length === 1;
+            if (!validArity) fail('E_ARITY', `Intrinsic ${target} is currently supported only at its reviewed arity.`, n.span);
+            return { ...n, kind: 'call', binding: direct, target, args, arity: args.length,
+              types: target === 'isFinite' || target === 'isNaN' ? ['Boolean'] : ['Number'] };
+          }
         }
-        if (binding.kind !== 'function') fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
+        const callee = expression(n.callee, f);
+        if (!exactly(callee.types, 'Function') || !callee.functionIds?.length)
+          fail('E_INDIRECT_CALL', 'Call target is not proven to be a supported JavaScript function value.', n.span);
+        if (callee.functionIds.length !== 1)
+          fail('E_AMBIGUOUS_CALLABLE', 'Call target may denote multiple function templates; runtime template dispatch is deferred.', n.span);
+        const binding = functionById.get(callee.functionIds[0]!)!;
         const args = n.args.map(a => expression(a, f)), instance = instantiate(binding, args, n);
-        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length, types: instance.returnTypes };
+        applyCapturedSummaries(f);
+        const callMode = args.length < instance.params.length ? 'missing' : args.length > instance.params.length ? 'extra' : 'exact';
+        return { ...n, kind: 'call', binding, target: instance.instanceId, callee, args, arity: instance.params.length,
+          callMode, types: instance.returnTypes, ...(instance.returnFunctionIds.length ? { functionIds: instance.returnFunctionIds } : {}) };
       }
     }
   }
