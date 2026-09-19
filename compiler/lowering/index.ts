@@ -103,6 +103,11 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
         contracts.add('core.ordinary-own-property-write-v1');
         return call('JsObject.SetProperty', [expression(e.object), stringLiteral(e.property), expression(e.value)]);
       case 'member':
+        if (e.property === 'length' && exactly(e.object.types, 'String')) {
+          const op = select({ kind: 'string.length' }, facts, e.span);
+          if (op !== 'string.length') fail('E_LOWERING', 'String length adapter has no implementation.', e.span);
+          return box(call('JsString.Length', [expression(e.object)], 'number'));
+        }
         if (e.property === 'length' && exactly(e.object.types, 'Array')) {
           const op = select({ kind: 'array.length' }, facts, e.span);
           if (op !== 'array.length') fail('E_LOWERING', 'Array length adapter has no implementation.', e.span);
@@ -150,6 +155,27 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           const op = select({ kind: 'array.push' }, facts, e.span);
           if (op !== 'array.push') fail('E_LOWERING', 'Array push adapter has no implementation.', e.span);
           return call('JsArray.Push', [expression(e.receiver), ...e.args.map(expression)]);
+        }
+        if ('receiver' in e && typeof e.target === 'string'
+            && (e.target.startsWith('array.') || e.target.startsWith('string.'))) {
+          const op = select({ kind: e.target }, facts, e.span);
+          if (op !== e.target) fail('E_LOWERING', `Builtin adapter ${e.target} has no matching implementation.`, e.span);
+          const receiver = expression(e.receiver), args = e.args.map(expression);
+          const runtime = {
+            'array.at': 'JsArray.At', 'array.includes': 'JsArray.Includes',
+            'array.indexOf': 'JsArray.IndexOf', 'array.pop': 'JsArray.Pop',
+            'string.at': 'JsString.At', 'string.charAt': 'JsString.CharAt',
+            'string.includes': 'JsString.Includes', 'string.indexOf': 'JsString.IndexOf',
+            'string.slice': 'JsString.Slice', 'string.substring': 'JsString.Substring',
+          }[e.target];
+          if (!runtime) return fail('E_LOWERING', `Unknown builtin lowering ${e.target}.`, e.span);
+          if (e.target === 'array.pop') return call(runtime, [receiver]);
+          if (e.target === 'array.at' || e.target === 'string.at' || e.target === 'string.charAt')
+            return call(runtime, [receiver, args[0]!]);
+          if (e.target === 'array.includes' || e.target === 'array.indexOf'
+              || e.target === 'string.includes' || e.target === 'string.indexOf'
+              || e.target === 'string.slice' || e.target === 'string.substring')
+            return call(runtime, [receiver, args[0]!, args[1] ?? undef()]);
         }
         if (e.target === 'object.hasOwn') {
           const op = select({ kind: 'object.hasOwn' }, facts, e.span);
