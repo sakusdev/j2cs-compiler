@@ -167,7 +167,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
           remaining.forEach((value, j) => shape.properties.set(String(j), cloneValue(value)));
           f.heap.set(refId, shape);
           f.env.set(binding.id, { types: ['Array'], refs: [refId] });
-          params.push({ binding, index: i, rest: true, initialization: 'rest' });
+          params.push({ binding, index: i, rest: true, hasDefault: false, initialization: 'rest' });
           continue;
         }
         const raw = supplied[i] ?? UNDEFINED;
@@ -176,11 +176,11 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
           const retained = raw.types.filter(t => t !== 'Undefined') as TypeSet;
           const value = retained.length ? unionValue({ types: retained }, valueOf(initializer)) : valueOf(initializer);
           f.env.set(binding.id, value);
-          params.push({ binding, index: i, rest: false,
+          params.push({ binding, index: i, rest: false, hasDefault: true,
             initialization: retained.length ? 'default-conditional' : 'default-always', initializer });
         } else {
           f.env.set(binding.id, cloneValue(raw));
-          params.push({ binding, index: i, rest: false, initialization: 'argument' });
+          params.push({ binding, index: i, rest: false, hasDefault: !!source.initializer, initialization: 'argument' });
         }
       }
       const body = statements(fn.body.body, f);
