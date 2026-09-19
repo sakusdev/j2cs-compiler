@@ -11,9 +11,11 @@ import {
   nodePathFacts,
   nodeProcessFacts,
   selectNodeAdapter,
+  verifyNodeRuleAdapters,
 } from '../../compiler/node/index.js';
 
-test('Node adapters pin reviewed canonical j2cs rule bytes', () => {
+test('Node adapters pin reviewed canonical j2cs rule bytes', async () => {
+  await verifyNodeRuleAdapters(path.join(ROOT, 'rule-db'));
   assert.equal(NODE_RULE_DB_COMMIT, '35ca8d859f9352e90ee2497f4ac8f6edb9c19ed1');
   for (const adapter of NODE_RULE_ADAPTERS) {
     const bytes = readFileSync(path.join(ROOT, 'rule-db', adapter.rulePath), 'utf8').replace(/\r\n/g, '\n');
