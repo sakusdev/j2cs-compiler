@@ -263,6 +263,14 @@
       "lowering": "call.function"
     },
     {
+      "ruleId": "function.closure.capture-mutable-binding",
+      "sha256": "23d3e04bc36b826bbe4104af9acdcdfddccd16257561816f5b2c9a72e54b5b3d",
+      "selector": {
+        "kind": "closure.capture"
+      },
+      "lowering": "closure.shared-cell"
+    },
+    {
       "ruleId": "function.declaration.hoisted-binding",
       "sha256": "4e9228bf68b1ebd5e4c7ea45fedfee753727f861a936090e5e620915ff69851e",
       "selector": {
