@@ -15,7 +15,12 @@ export type SemanticExpr = Node & Typed & (
   | { kind: 'member'; object: SemanticExpr; property: string }
   | { kind: 'object'; properties: { key: string; value: SemanticExpr }[] }
   | { kind: 'array'; elements: (SemanticExpr | null)[] }
-  | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt' | number; args: SemanticExpr[]; binding: Binding; arity: number }
+  | { kind: 'spread'; operand: SemanticExpr }
+  | { kind: 'argumentsLength'; binding: Binding }
+  | { kind: 'argumentsIndex'; binding: Binding; index: number }
+  | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt' | number; args: SemanticExpr[]; binding: Binding; arity: number;
+      suppliedCount?: number; callKind?: 'exact' | 'missing' | 'extra' | 'spread' | 'nonSimpleExact';
+      functionSimple?: boolean; observesArguments?: boolean }
   | { kind: 'call'; target: 'array.push'; receiver: SemanticExpr; args: SemanticExpr[]; arity: number }
   | { kind: 'call'; target: 'object.hasOwn'; receiver: SemanticExpr; property: string; binding: Binding; args: []; arity: 2 }
 );
@@ -35,7 +40,13 @@ export type SemanticStatement = Node & (
   | { kind: 'continue' }
   | { kind: 'return'; value: SemanticExpr }
 );
+export interface SemanticParameter {
+  binding: Binding; index: number; rest: boolean;
+  initialization: 'argument' | 'default-always' | 'default-conditional' | 'rest';
+  initializer?: SemanticExpr;
+}
 export interface SemanticFunction extends Node {
-  instanceId: number; binding: Binding; params: Binding[]; body: SemanticStatement[]; returnTypes: TypeSet;
+  instanceId: number; binding: Binding; argumentsBinding: Binding; params: SemanticParameter[];
+  body: SemanticStatement[]; returnTypes: TypeSet; simpleParameters: boolean; observesArguments: boolean;
 }
 export interface SemanticProgram { body: SemanticStatement[]; functions: SemanticFunction[] }
