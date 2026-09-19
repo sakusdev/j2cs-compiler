@@ -19,6 +19,19 @@ export interface NodeCompatProof {
 }
 
 const schedulerCompatible: Predicate = { fact: 'node.scheduler', equals: 'compatible' };
+const metaEventsUnobserved: Predicate = { fact: 'node.events.metaEventsObserved', equals: false };
+const rawListenersUnobserved: Predicate = { fact: 'node.events.rawListenersObserved', equals: false };
+const listenerThisUnobserved: Predicate = { fact: 'node.listener.thisObserved', equals: false };
+const nonErrorPayload: Predicate = { fact: 'node.errorPayload.kind', equals: 'nonError' };
+const pausedReadable: Predicate = { fact: 'node.stream.flowing', equals: false };
+const bufferReadMode: Predicate = { fact: 'node.stream.readEncoding', equals: 'buffer' };
+const noDataListeners: Predicate = { fact: 'node.stream.dataListenerCount', equals: 0 };
+const admittedChunk: Predicate = { fact: 'node.stream.chunkRepresentation', equals: 'NodeStreamChunk' };
+const defaultEndEncoding: Predicate = { fact: 'node.stream.endEncoding', equals: 'default' };
+const noFinalHook: Predicate = { fact: 'node.stream.customFinalHook', equals: false };
+const noReadHook: Predicate = { fact: 'node.stream.customReadHook', equals: false };
+const bufferViewOnly: Predicate = { fact: 'node.buffer.viewOperation', equals: 'sliceOrSubarray' };
+const bufferMetadataUnobserved: Predicate = { fact: 'node.buffer.metadataObserved', equals: false };
 
 export const NODE_COMPAT_ADAPTERS: readonly NodeCompatAdapter[] = [
   { ruleId: 'node.events.event-emitter.constructor', sha256: '7ae8c721a6499d2f4ddf2ea7b40998524ffcf96033c346d1affd6152a44ac44d', helper: 'NodeEvents.Create' },
