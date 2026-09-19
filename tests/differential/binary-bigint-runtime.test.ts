@@ -15,6 +15,7 @@ const u16 = new Uint16Array(b, 0, 4);
 console.log(b.byteLength, u16.length, u16[0], u16[99] === undefined);
 u16[0] = 0x1234;
 console.log(u16[0]);
+try { u16[99] = 1n; } catch (e) { console.log(e.name); }
 
 const clamp = new Uint8ClampedArray(2);
 clamp[0] = 2.5; clamp[1] = 3.5;
@@ -38,6 +39,7 @@ const bi = new BigUint64Array(1);
 bi[0] = (1n << 64n) + 3n;
 console.log(bi[0]);
 try { bi[0] = 1; } catch (e) { console.log(e.name); }
+try { bi[99] = 1; } catch (e) { console.log(e.name); }
 
 try { dv.getUint32(14); } catch (e) { console.log(e.name); }
 
@@ -59,6 +61,7 @@ var u16 = JsBinary.NewTypedArrayView(JsTypedArrayKind.Uint16, b, JsBinaryValue.F
 Console.WriteLine($"{b.ByteLength} {u16.Length} {S(JsBinary.TypedArrayGet(u16, JsBinaryValue.FromNumber(0)))} {B(JsBinary.TypedArrayGet(u16, JsBinaryValue.FromNumber(99)).Kind == JsBinaryValueKind.Undefined)}");
 JsBinary.TypedArraySetNumber(u16, JsBinaryValue.FromNumber(0), JsBinaryValue.FromNumber(0x1234));
 Console.WriteLine(S(JsBinary.TypedArrayGet(u16, JsBinaryValue.FromNumber(0))));
+try { JsBinary.TypedArraySetNumber(u16, JsBinaryValue.FromNumber(99), JsBinaryValue.FromBigInt(JsBigInt.ParseLiteral("1"))); } catch (JsBinaryBigIntException e) { Console.WriteLine(e.Name); }
 
 var clampBuffer = JsBinary.NewArrayBuffer(JsBinaryValue.FromNumber(2));
 var clamp = JsBinary.NewTypedArrayView(JsTypedArrayKind.Uint8Clamped, clampBuffer, JsBinaryValue.FromNumber(0), JsBinaryValue.FromNumber(2));
@@ -89,6 +92,7 @@ var huge = JsBigInt.Add(JsBigInt.Exponentiate(JsBigInt.ParseLiteral("2"), JsBigI
 JsBinary.TypedArraySetBigInt(bi, JsBinaryValue.FromNumber(0), JsBinaryValue.FromBigInt(huge));
 Console.WriteLine(S(JsBinary.TypedArrayGet(bi, JsBinaryValue.FromNumber(0))));
 try { JsBinary.TypedArraySetBigInt(bi, JsBinaryValue.FromNumber(0), JsBinaryValue.FromNumber(1)); } catch (JsBinaryBigIntException e) { Console.WriteLine(e.Name); }
+try { JsBinary.TypedArraySetBigInt(bi, JsBinaryValue.FromNumber(99), JsBinaryValue.FromNumber(1)); } catch (JsBinaryBigIntException e) { Console.WriteLine(e.Name); }
 
 try { _ = JsBinary.DataViewGet(dv, JsDataViewKind.Uint32, JsBinaryValue.FromNumber(14)); } catch (JsBinaryBigIntException e) { Console.WriteLine(e.Name); }
 
