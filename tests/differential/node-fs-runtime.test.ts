@@ -121,8 +121,8 @@ test('NODE_FS promise runtime matches directly awaited Node I/O with an explicit
     'sealed class CompatibleScheduler : INodePromiseScheduler',
     '{',
     '    public bool PreservesJavaScriptMicrotaskOrdering => true;',
-    '    public async Task<T> Schedule<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)',
-    '        => await operation(cancellationToken).ConfigureAwait(false);',
+    '    public async Task<T> BridgeHostTask<T>(Task<T> hostTask, CancellationToken cancellationToken)',
+    '        => await hostTask.ConfigureAwait(false);',
     '}',
     '',
   ].join('\n');
