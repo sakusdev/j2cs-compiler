@@ -19,7 +19,7 @@ export type WebSocketRuleId =
   | 'web.websocket.event.close'
   | 'web.websocket.network-runtime-boundary';
 
-type ProofFact = 'webBuiltinIntegrity' | 'networkBoundary' | 'taskDispatch';
+type ProofFact = 'webBuiltinIntegrity' | 'networkBoundary' | 'urlResolution' | 'taskDispatch';
 
 export interface Evidence<T extends string> {
   value: T;
@@ -29,6 +29,7 @@ export interface Evidence<T extends string> {
 export interface WebSocketProofFacts {
   webBuiltinIntegrity?: Evidence<'pristine' | 'mutated'>;
   networkBoundary?: Evidence<'browser-host' | 'raw-socket'>;
+  urlResolution?: Evidence<'relevant-settings-object' | 'missing-base'>;
   taskDispatch?: Evidence<'event-loop' | 'synchronous'>;
 }
 
@@ -45,9 +46,9 @@ export interface WebSocketRuleProof {
 }
 
 export const WEBSOCKET_RULE_CONTRACTS: readonly WebSocketRuleContract[] = [
-  { id: 'web.websocket.constructor.url', sha256: '51caa2339f95ffc80db6479055aa439ea17ac76652cb57d316bc06a3b23c9dd1', requires: ['webBuiltinIntegrity', 'networkBoundary'] },
+  { id: 'web.websocket.constructor.url', sha256: '51caa2339f95ffc80db6479055aa439ea17ac76652cb57d316bc06a3b23c9dd1', requires: ['webBuiltinIntegrity', 'networkBoundary', 'urlResolution'] },
   { id: 'web.websocket.constructor.protocols', sha256: '749d74b3d350b4858376bfd78db67dfffff984536b9aa3baee6ba1a700e16cdf', requires: ['webBuiltinIntegrity', 'networkBoundary'] },
-  { id: 'web.websocket.constructor.http-scheme-normalization', sha256: 'd227882e5cb5c41df6b9ce9b469b0dcf6faab6e2a35e21076e58bc4acafa73bc', requires: ['webBuiltinIntegrity', 'networkBoundary'] },
+  { id: 'web.websocket.constructor.http-scheme-normalization', sha256: 'd227882e5cb5c41df6b9ce9b469b0dcf6faab6e2a35e21076e58bc4acafa73bc', requires: ['webBuiltinIntegrity', 'networkBoundary', 'urlResolution'] },
   { id: 'web.websocket.ready-state', sha256: '872ebe701eb95b57059d7b7a920484dc0fb99082760c408e42c3884defe86410', requires: ['webBuiltinIntegrity', 'networkBoundary'] },
   { id: 'web.websocket.send.text', sha256: '1086871d8f2a242d3b7cbf1366c557c62beb6eaa3405dabc78101ef2d8fc92d4', requires: ['webBuiltinIntegrity', 'networkBoundary'] },
   { id: 'web.websocket.send.connecting-error', sha256: 'f333e6ec405580567ca15d59587e415a32bce17c5b70df82abcb92888d7e06fd', requires: ['webBuiltinIntegrity', 'networkBoundary'] },
@@ -80,6 +81,13 @@ function checkFact(name: ProofFact, facts: WebSocketProofFacts): { verdict: 'pro
     return {
       verdict: facts.networkBoundary.value === 'browser-host' ? 'proven' : 'disproven',
       evidence: facts.networkBoundary.evidence
+    };
+  }
+  if (name === 'urlResolution') {
+    if (!facts.urlResolution) return { verdict: 'unknown', evidence: 'No relevant-settings-object URL resolution proof.' };
+    return {
+      verdict: facts.urlResolution.value === 'relevant-settings-object' ? 'proven' : 'disproven',
+      evidence: facts.urlResolution.evidence
     };
   }
   if (!facts.taskDispatch) return { verdict: 'unknown', evidence: 'No event-loop dispatch proof.' };
