@@ -7,8 +7,8 @@ public static class JsOperators
     {
         // Compiler adapter guards keep Object/Array values out until ToPrimitive exists.
         if (left.Kind == JsKind.String || right.Kind == JsKind.String)
-            return JsValue.FromString(JsCoercion.ToString(left) + JsCoercion.ToString(right));
-        return JsValue.FromNumber(JsCoercion.ToNumberNonString(left) + JsCoercion.ToNumberNonString(right));
+            return JsValue.FromString(JsCoercion.ToStringPrimitive(left) + JsCoercion.ToStringPrimitive(right));
+        return JsValue.FromNumber(JsCoercion.ToNumberPrimitive(left) + JsCoercion.ToNumberPrimitive(right));
     }
 
     public static bool StrictEquals(JsValue left, JsValue right)
@@ -24,6 +24,41 @@ public static class JsOperators
             _ => throw new InvalidOperationException("Unknown value tag")
         };
     }
+
+    public static bool LooseEquals(JsValue left, JsValue right)
+    {
+        if (left.Kind == right.Kind) return StrictEquals(left, right);
+        if ((left.Kind == JsKind.Null && right.Kind == JsKind.Undefined)
+            || (left.Kind == JsKind.Undefined && right.Kind == JsKind.Null)) return true;
+        if (left.Kind == JsKind.Number && right.Kind == JsKind.String)
+            return left.Number == JsCoercion.ToNumberPrimitive(right);
+        if (left.Kind == JsKind.String && right.Kind == JsKind.Number)
+            return JsCoercion.ToNumberPrimitive(left) == right.Number;
+        if (left.Kind == JsKind.Boolean)
+            return LooseEquals(JsValue.FromNumber(left.Boolean ? 1d : 0d), right);
+        if (right.Kind == JsKind.Boolean)
+            return LooseEquals(left, JsValue.FromNumber(right.Boolean ? 1d : 0d));
+        return false;
+    }
+
+    public static bool LessThan(JsValue left, JsValue right) =>
+        BothStrings(left, right) ? string.CompareOrdinal(left.String, right.String) < 0
+            : JsCoercion.ToNumberPrimitive(left) < JsCoercion.ToNumberPrimitive(right);
+
+    public static bool LessThanOrEqual(JsValue left, JsValue right) =>
+        BothStrings(left, right) ? string.CompareOrdinal(left.String, right.String) <= 0
+            : JsCoercion.ToNumberPrimitive(left) <= JsCoercion.ToNumberPrimitive(right);
+
+    public static bool GreaterThan(JsValue left, JsValue right) =>
+        BothStrings(left, right) ? string.CompareOrdinal(left.String, right.String) > 0
+            : JsCoercion.ToNumberPrimitive(left) > JsCoercion.ToNumberPrimitive(right);
+
+    public static bool GreaterThanOrEqual(JsValue left, JsValue right) =>
+        BothStrings(left, right) ? string.CompareOrdinal(left.String, right.String) >= 0
+            : JsCoercion.ToNumberPrimitive(left) >= JsCoercion.ToNumberPrimitive(right);
+
+    private static bool BothStrings(JsValue left, JsValue right) =>
+        left.Kind == JsKind.String && right.Kind == JsKind.String;
 }
 
 public static class JsReference
