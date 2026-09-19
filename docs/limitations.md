@@ -1,9 +1,9 @@
 # MVP limitations
 
-The compiler handles a closed, single-file primitive Node module. It is not a
+The compiler handles a closed, single-file Node module with primitive plus compiler-owned Object/Array values. It is not a
 complete JavaScript engine, TypeScript type checker, Node implementation, or
 Electron application converter. The rule DB's 2,681 entries are knowledge-base
-coverage; **29 reviewed adapters** currently have executable lowering. These are
+coverage; **32 reviewed adapters** currently have executable lowering. These are
 different measures.
 
 ## Explicitly unsupported
