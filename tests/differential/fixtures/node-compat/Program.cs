@@ -29,6 +29,8 @@ Console.WriteLine($"{buffer.ToString("utf8")} {view.ToString("hex")} {NodeBuffer
 var copy = NodeBuffer.From(buffer);
 copy[0] = 0x7a;
 Console.WriteLine($"{buffer[0]} {copy[0]}");
+Console.WriteLine(NodeBuffer.From(new double[] { 257, -1, 3.9 }).ToString("hex"));
+Console.WriteLine(NodeBuffer.ByteLength("é", "not-an-encoding"));
 var backing = new byte[] { 1, 2, 3 };
 var shared = NodeBuffer.FromArrayBuffer(backing);
 shared[0] = 9;
