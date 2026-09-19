@@ -21,40 +21,47 @@ public sealed class NodeSpawnOptions
 
 public static class NodeChildProcess
 {
-    public static NodeSpawnSyncResult SpawnSync(
+    public static NodeSpawnAttempt StartPiped(
         string command,
         IReadOnlyList<string>? arguments = null,
         NodeSpawnOptions? options = null)
     {
         if (string.IsNullOrEmpty(command))
-            return new NodeSpawnSyncResult(null, null, string.Empty, string.Empty,
-                new NodeProcessError("ENOENT", "Command must not be empty."));
+            return new NodeSpawnAttempt(null, new NodeProcessError("ENOENT", "Command must not be empty."));
 
-        using var process = new Process
-        {
-            StartInfo = BuildStartInfo(command, arguments, options),
-        };
-
+        var process = new Process { StartInfo = BuildStartInfo(command, arguments, options) };
         try
         {
             if (!process.Start())
-                return new NodeSpawnSyncResult(null, null, string.Empty, string.Empty,
-                    new NodeProcessError("E_START", "Host process API did not start the child."));
-
-            process.StandardInput.Close();
-            var stdout = process.StandardOutput.ReadToEndAsync();
-            var stderr = process.StandardError.ReadToEndAsync();
-            process.WaitForExit();
-            Task.WhenAll(stdout, stderr).GetAwaiter().GetResult();
-            return new NodeSpawnSyncResult(process.ExitCode, null, stdout.Result, stderr.Result, null);
+            {
+                process.Dispose();
+                return new NodeSpawnAttempt(null, new NodeProcessError("E_START", "Host process API did not start the child."));
+            }
+            return new NodeSpawnAttempt(new NodeChildProcessHandle(process), null);
         }
-        catch (Exception error) when (error is Win32Exception
-            or DirectoryNotFoundException
-            or FileNotFoundException
-            or UnauthorizedAccessException)
+        catch (Exception error) when (IsExpectedStartFailure(error))
         {
-            return new NodeSpawnSyncResult(null, null, string.Empty, string.Empty, MapStartError(error));
+            process.Dispose();
+            return new NodeSpawnAttempt(null, MapStartError(error));
         }
+    }
+
+    public static NodeSpawnSyncResult SpawnSync(
+        string command,
+        IReadOnlyList<string>? arguments = null,
+        NodeSpawnOptions? options = null)
+    {
+        var attempt = StartPiped(command, arguments, options);
+        if (!attempt.IsSuccess)
+            return new NodeSpawnSyncResult(null, null, string.Empty, string.Empty, attempt.Error);
+
+        using var child = attempt.Handle!;
+        child.Stdin.Close();
+        var stdout = child.Stdout.ReadToEndAsync();
+        var stderr = child.Stderr.ReadToEndAsync();
+        var status = child.WaitForExitAsync().GetAwaiter().GetResult();
+        Task.WhenAll(stdout, stderr).GetAwaiter().GetResult();
+        return new NodeSpawnSyncResult(status, null, stdout.Result, stderr.Result, null);
     }
 
     private static ProcessStartInfo BuildStartInfo(
@@ -90,6 +97,9 @@ public static class NodeChildProcess
 
         return start;
     }
+
+    private static bool IsExpectedStartFailure(Exception error)
+        => error is Win32Exception or DirectoryNotFoundException or FileNotFoundException or UnauthorizedAccessException;
 
     private static NodeProcessError MapStartError(Exception error) => error switch
     {
