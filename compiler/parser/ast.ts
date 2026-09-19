@@ -19,6 +19,7 @@ export type Expr = Node & (
   | { kind: 'object'; properties: ObjectProperty[] }
   | { kind: 'array'; elements: (Expr | null)[] }
   | { kind: 'call'; callee: Expr; args: Expr[] }
+  | { kind: 'await'; operand: Expr }
 );
 export interface Parameter extends Node { name: string }
 export type Statement = Node & (
@@ -31,7 +32,7 @@ export type Statement = Node & (
   | { kind: 'for'; initializer?: ForInitializer; condition?: Expr; update?: Expr; body: Statement }
   | { kind: 'break' }
   | { kind: 'continue' }
-  | { kind: 'function'; name: string; params: Parameter[]; body: Statement & { kind: 'block' } }
+  | { kind: 'function'; name: string; params: Parameter[]; body: Statement & { kind: 'block' }; async: boolean }
   | { kind: 'return'; value?: Expr }
   | { kind: 'empty' }
 );
