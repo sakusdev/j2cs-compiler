@@ -23,6 +23,7 @@ const arrayPrototypeKeys = new Set(['at', 'concat', 'copyWithin', 'entries', 'ev
 export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   const instances: SemanticFunction[] = [], cache = new Map<string, SemanticFunction>();
   const summaries = new Map<number, ValueInfo>();
+  let captureEpoch = 0;
   const functionById = new Map(bindings.functions.map(b => [b.id, b]));
   let nextInstance = 0;
   const syntheticUndefined = (n: Node): SE => ({ ...n, kind: 'literal', value: undefined, types: ['Undefined'] });
@@ -43,7 +44,9 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   function functionValue(binding: Binding): ValueInfo { return { types: ['Function'], functionIds: [binding.id] }; }
   function record(binding: Binding, value: ValueInfo): void {
     const old = summaries.get(binding.id);
-    summaries.set(binding.id, old ? unionValue(old, value) : cloneValue(value));
+    const next = old ? unionValue(old, value) : cloneValue(value);
+    if (bindings.capturedIds.has(binding.id) && (!old || !sameValue(old, next))) captureEpoch++;
+    summaries.set(binding.id, next);
   }
   function applyCapturedSummaries(f: Flow): void {
     for (const id of bindings.capturedIds) {
@@ -227,7 +230,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object/Array arguments require alias/effect summaries and are deferred.', callNode.span);
     const params = fn.params.map(p => bindings.declarations.get(p.id)!);
     const formal = params.map((_, i) => args[i] ?? syntheticUndefined(callNode));
-    const key = `${b.id}:args=${formal.map(valueOf).map(specializationValueKey).join(',')}:captures=${captureSignature(fn)}`;
+    const key = `${b.id}:epoch=${captureEpoch}:args=${formal.map(valueOf).map(specializationValueKey).join(',')}:captures=${captureSignature(fn)}`;
     const found = cache.get(key); if (found) return found;
     const seedEnv = new Map(params.map((p, i) => [p.id, valueOf(formal[i]!)]));
     const instance: SemanticFunction = {
