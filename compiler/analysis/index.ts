@@ -3,6 +3,7 @@ import type { Expr, Node, Program, Statement } from '../parser/ast.js';
 import type { SemanticExpr as SE, SemanticForInitializer, SemanticFunction, SemanticProgram, SemanticStatement as SS } from '../ir/semantic.js';
 import { type Binding, type Bindings } from './bindings.js';
 import { exactly, hasReference, literalType, union, type TypeSet } from './facts.js';
+import { requireDiscardedAsyncResult, requirePrimitiveAwait, type ExpressionUse } from './async.js';
 
 interface ValueInfo { types: TypeSet; refs?: readonly number[] }
 interface Shape { kind: 'Object' | 'Array'; properties: Map<string, ValueInfo>; length?: number }
@@ -158,11 +159,11 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       const value = syntheticUndefined(fn.body);
       body.push({ ...fn.body, kind: 'return', value }); f.returns.push(value.types);
     }
-    const instance: SemanticFunction = { ...fn, instanceId, binding: b, params, body, returnTypes: union(...f.returns) };
+    const instance: SemanticFunction = { ...fn, instanceId, binding: b, params, body, returnTypes: union(...f.returns), async: fn.async };
     instances.push(instance); cache.set(key, instance); active.delete(b.id); return instance;
   }
 
-  function expression(n: Expr, f: Flow): SE {
+  function expression(n: Expr, f: Flow, use: ExpressionUse = 'value'): SE {
     switch (n.kind) {
       case 'literal': return { ...n, types: literalType(n.value) };
       case 'object': {
@@ -199,6 +200,11 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         return { ...n, left, right, types };
       }
       case 'unary': return { ...n, operand: expression(n.operand, f), types: [n.op === '!' ? 'Boolean' : 'Number'] };
+      case 'await': {
+        const operand = expression(n.operand, f);
+        requirePrimitiveAwait(operand.types, n.span);
+        return { ...n, operand, types: operand.types };
+      }
       case 'assign': {
         if (n.target.kind === 'identifier') {
           const binding = bindings.references.get(n.target.id)!;
@@ -279,6 +285,20 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         if (n.callee.kind !== 'identifier') fail('E_INDIRECT_CALL', 'Only statically resolved direct calls are supported.', n.span);
         const binding = bindings.references.get(n.callee.id)!;
         if (binding.kind === 'intrinsic') {
+          if (binding.name === 'queueMicrotask') {
+            if (n.args.length !== 1 || n.args[0]!.kind !== 'identifier')
+              fail('E_MICROTASK_CALLBACK',
+                'queueMicrotask currently requires exactly one statically resolved function declaration callback.', n.span);
+            const callbackBinding = bindings.references.get(n.args[0]!.id)!;
+            if (callbackBinding.kind !== 'function')
+              fail('E_MICROTASK_CALLBACK', 'queueMicrotask callback is not a proven function declaration.', n.args[0]!.span);
+            const callback = instantiate(callbackBinding, [], n);
+            if (callback.async)
+              fail('E_MICROTASK_ASYNC_CALLBACK',
+                'Async queueMicrotask callbacks are deferred until Promise rejection observation is available.', n.args[0]!.span);
+            return { ...n, kind: 'call', binding, target: 'queueMicrotask', callback: callback.instanceId,
+              args: [], arity: 1, types: ['Undefined'] };
+          }
           if (!['isFinite', 'isNaN', 'parseFloat', 'parseInt'].includes(binding.name))
             fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
           const target = binding.name as 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt';
@@ -290,7 +310,9 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         }
         if (binding.kind !== 'function') fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
         const args = n.args.map(a => expression(a, f)), instance = instantiate(binding, args, n);
-        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length, types: instance.returnTypes };
+        if (instance.async) requireDiscardedAsyncResult(use, n.span);
+        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length,
+          async: instance.async, types: instance.async ? ['Undefined'] : instance.returnTypes };
       }
     }
   }
@@ -311,7 +333,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         const initializer = n.initializer ? expression(n.initializer, f) : syntheticUndefined(n);
         f.env.set(binding.id, valueOf(initializer)); return { ...n, binding, initializer };
       }
-      case 'expression': return { ...n, expression: expression(n.expression, f) };
+      case 'expression': return { ...n, expression: expression(n.expression, f, 'statement') };
       case 'block': return { ...n, body: statements(n.body, f, loop) };
       case 'return': {
         const value = n.value ? expression(n.value, f) : syntheticUndefined(n);
