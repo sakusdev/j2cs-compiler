@@ -54,6 +54,7 @@ public sealed class NodeTlsClient : IAsyncDisposable
                 };
                 await tls.AuthenticateAsClientAsync(options, lifetime.Token).ConfigureAwait(false);
                 secure = true;
+                connecting = false;
                 onSecureConnect?.Invoke(this);
             }
             catch (SocketException error)
