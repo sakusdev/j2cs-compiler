@@ -52,6 +52,9 @@ public sealed class JsPromise : JsObject, IJsThenable
 
     public JsValue AsValue() => JsValue.FromReference(this);
 
+    public static bool IsSamePromise(JsValue value, JsPromise promise)
+        => value.Kind == JsKind.Object && ReferenceEquals(JsObject.RequireReference(value), promise);
+
     public static JsPromise Create(JsPromiseExecutor executor) => Create(DefaultQueue, executor);
 
     public static JsPromise Create(JsJobQueue queue, JsPromiseExecutor executor)
