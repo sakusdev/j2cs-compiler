@@ -77,7 +77,7 @@ export function parse(source: string, file = 'input.js'): Program {
         if (target.kind !== 'identifier') unsupported(n.left, 'Property/destructuring compound assignment');
         return { ...m, kind: 'compound', op: op as '+=' | '-=' | '*=' | '/=' | '%=', target, value: expr(n.right) };
       }
-      if (!['+', '-', '*', '/', '%', '<', '<=', '>', '>=', '===', '!=='].includes(op)) unsupported(n, `Operator ${op}`);
+      if (!['+', '-', '*', '/', '%', '<', '<=', '>', '>=', '==', '!=', '===', '!=='].includes(op)) unsupported(n, `Operator ${op}`);
       return { ...m, kind: 'binary', op, left: expr(n.left), right: expr(n.right) };
     }
     if (ts.isPrefixUnaryExpression(n)) {
@@ -87,7 +87,7 @@ export function parse(source: string, file = 'input.js'): Program {
         if (target.kind !== 'identifier') unsupported(n.operand, 'Property update');
         return { ...m, kind: 'update', op, prefix: true, target };
       }
-      if (!['-', '!'].includes(op)) unsupported(n, `Unary operator ${op}`);
+      if (!['-', '+', '!'].includes(op)) unsupported(n, `Unary operator ${op}`);
       return { ...m, kind: 'unary', op, operand: expr(n.operand) };
     }
     if (ts.isPostfixUnaryExpression(n)) {
