@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { compile, createCompiler } from '../../compiler/index.js';
 import { CompileError } from '../../compiler/diagnostics/index.js';
 import {
@@ -13,6 +14,8 @@ const index = await createCompiler();
 
 test('binary/BigInt runtime contract is connected to canonical pinned j2cs rules', () => {
   assert.equal(BINARY_BIGINT_RULE_DB_COMMIT, '35ca8d859f9352e90ee2497f4ac8f6edb9c19ed1');
+  assert.equal(execFileSync('git', ['-C', 'rule-db', 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    BINARY_BIGINT_RULE_DB_COMMIT, 'binary/BigInt proof contract must review the exact pinned rule DB commit');
   assert.deepEqual(validateBinaryBigIntRuleContract(index.database), []);
   assert.equal(BINARY_BIGINT_RULES.length, 16);
   for (const contract of BINARY_BIGINT_RULES) {
