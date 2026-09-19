@@ -10,10 +10,29 @@ namespace J2cs.Runtime;
 public class JsObject
 {
     private readonly Dictionary<string, JsValue> ownData = new(StringComparer.Ordinal);
+    private readonly List<string> ownOrder = [];
 
     protected virtual bool TryGetOwn(string key, out JsValue value) => ownData.TryGetValue(key, out value);
-    protected virtual void SetOwn(string key, JsValue value) => ownData[key] = value;
+
+    protected virtual void SetOwn(string key, JsValue value)
+    {
+        if (!ownData.ContainsKey(key)) ownOrder.Add(key);
+        ownData[key] = value;
+    }
+
     public virtual bool HasOwnProperty(string key) => ownData.ContainsKey(key);
+
+    /// <summary>
+    /// Internal ordered own-data enumeration. This does not expose prototype, descriptor,
+    /// accessor, Symbol, Proxy, or host enumeration behavior. Consumers must apply the
+    /// ECMAScript ordering required by their own proven contract.
+    /// </summary>
+    internal IEnumerable<KeyValuePair<string, JsValue>> EnumerateOwnData()
+    {
+        foreach (var key in ownOrder)
+            if (ownData.TryGetValue(key, out var value))
+                yield return new KeyValuePair<string, JsValue>(key, value);
+    }
 
     internal static JsObject RequireReference(JsValue value)
         => value.Kind == JsKind.Object ? value.Reference : throw new InvalidOperationException("Compiler Object/Array proof violated");
