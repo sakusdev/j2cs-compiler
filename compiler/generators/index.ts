@@ -267,7 +267,7 @@ function compileGeneratorProgram(program: GProgram, index: RuleIndex): Generator
         slot.type = rhs.type;
         slot.generator = rhs.generator;
         slot.resultValueType = rhs.resultValueType;
-        return { code: 'JsReference.Assign(ref ' + slot.cname + ', ' + rhs.code + ')', ...rhs };
+        return { ...rhs, code: 'JsReference.Assign(ref ' + slot.cname + ', ' + rhs.code + ')' };
       }
       case 'binary': {
         const left = valueExpression(e.left, context);
@@ -528,7 +528,7 @@ function compileGeneratorProgram(program: GProgram, index: RuleIndex): Generator
       const di = delegateIndex++;
       const fields = { value: '__delegate' + di, active: '__delegateActive' + di, first: '__delegateFirst' + di };
       delegateFields.push(fields);
-      current.lines.push(fields.value + ' = G' + inner.id + '(' + args.map(a => a.code).join(', ') + ');');
+      current.lines.push(fields.value + ' = Program.G' + inner.id + '(' + args.map(a => a.code).join(', ') + ');');
       current.lines.push(fields.active + ' = true;');
       current.lines.push(fields.first + ' = true;');
       const delegateState = nextState;
