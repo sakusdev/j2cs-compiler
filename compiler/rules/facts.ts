@@ -78,9 +78,13 @@ export function expressionFacts(e: SemanticExpr): Facts {
     else if (e.target === 'array.push') f.prove('member.integrity', 'pristine', 'Receiver has no own push property and Array prototype is pristine');
     else if (e.target === 'object.hasOwn') f.prove('member.integrity', 'pristine', 'Direct unshadowed Object.hasOwn with static key')
       .prove('object.ownPropertyTest', true, 'JsObject/JsArray explicitly preserve own-property presence separately from undefined');
-    else if (typeof e.target === 'string' && (e.target.startsWith('array.') || e.target.startsWith('string.')))
+    else if (typeof e.target === 'string' && (e.target.startsWith('array.') || e.target.startsWith('string.'))) {
       f.prove('member.integrity', 'pristine', 'Direct builtin member resolution is proven; supported Array receivers have no own override')
         .prove('call.argumentCount', e.args.length, 'AST builtin argument count');
+      if (e.target !== 'array.pop')
+        f.prove('builtin.coercionInputsPrimitive', true,
+          'Semantic analysis rejects object ToPrimitive for every argument position coerced by the selected builtin helper');
+    }
     else if (typeof e.target === 'number') {
       functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
         .prove('function.parameterCount', e.arity, 'Resolved declaration signature');
