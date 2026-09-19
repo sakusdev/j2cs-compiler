@@ -85,7 +85,21 @@ test('function values, closures, recursion and flexible arity lower through the 
   assert.match(r.source, /JsFunction\.CallKnown/);
   assert.match(r.source, /JsEnvironment\.Read/);
   assert.ok(!/\bdynamic\b|\bobject\b/.test(r.source));
+});test('function specialization invalidates when captured binding facts widen', () => {
+  const r = compile(`
+    let x = 1;
+    function f() { return x + 1; }
+    console.log(f());
+    x = 'a';
+    console.log(f());
+  `, index);
+  const additions = r.trace.filter(t =>
+    t.ruleId === 'operators.addition.number' || t.ruleId === 'operators.addition.dynamic');
+  assert.ok(additions.some(t => t.ruleId === 'operators.addition.number'));
+  assert.ok(additions.some(t => t.ruleId === 'operators.addition.dynamic'));
 });
+
+
 const diagnostics: [string, string, string][] = [
   ['parse error', 'const = ;', 'E_PARSE'],
   ['var', 'var x = 1;', 'E_UNSUPPORTED_SYNTAX'],
