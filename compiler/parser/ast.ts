@@ -21,6 +21,7 @@ export type Expr = Node & (
   | { kind: 'call'; callee: Expr; args: Expr[] }
 );
 export interface Parameter extends Node { name: string }
+export interface CatchClause extends Node { binding?: Parameter; body: Statement & { kind: 'block' } }
 export type Statement = Node & (
   | { kind: 'variable'; mode: 'const' | 'let'; name: string; initializer?: Expr }
   | { kind: 'expression'; expression: Expr }
@@ -33,6 +34,8 @@ export type Statement = Node & (
   | { kind: 'continue' }
   | { kind: 'function'; name: string; params: Parameter[]; body: Statement & { kind: 'block' } }
   | { kind: 'return'; value?: Expr }
+  | { kind: 'throw'; value: Expr }
+  | { kind: 'try'; body: Statement & { kind: 'block' }; catchClause?: CatchClause; finallyBlock?: Statement & { kind: 'block' } }
   | { kind: 'empty' }
 );
 export type FunctionDeclaration = Statement & { kind: 'function' };
