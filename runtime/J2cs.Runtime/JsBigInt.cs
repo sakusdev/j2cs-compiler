@@ -177,7 +177,6 @@ public readonly struct JsBigInt : IEquatable<JsBigInt>
     }
 
     public bool Equals(JsBigInt other) => Value.Equals(other.Value);
-    public override bool Equals(object? obj) => obj is JsBigInt other && Equals(other);
     public override int GetHashCode() => Value.GetHashCode();
     public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
 }
