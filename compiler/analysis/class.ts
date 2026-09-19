@@ -155,27 +155,35 @@ export function analyzeClassProgram(program: ParsedClassProgram, database: RuleD
     return fail('E_CLASS_STATIC_METHOD', `Static method '${className}.${methodName}' is not defined.`, span);
   }
 
-  const inspect = (e: ClassExpr): void => {
+  const inspect = (available: ReadonlySet<string>, owner?: ParsedClass) => (e: ClassExpr): void => {
+    if (e.kind === 'staticRead' || e.kind === 'staticCall') {
+      if (!available.has(e.className)) fail('E_CLASS_TDZ', `Class '${e.className}' is not evaluated yet.`, e.span);
+      if (owner?.expression && e.className === owner.bindingName) fail('E_CLASS_EXPRESSION_TDZ', 'Class-expression initializer cannot read its outer const binding.', e.span);
+    }
     if (e.kind === 'staticRead') resolveField(e.className, e.property, e.span);
     if (e.kind === 'staticCall') {
       if (e.args.length) fail('E_CLASS_ARITY_DEPENDENCY', 'Static class calls with arguments are owned by the arguments/default/rest lane.', e.span);
       resolveMethod(e.className, e.method, e.span);
     }
   };
+  const evaluated = new Set<string>();
   for (const item of program.items) {
     if (item.kind === 'class') {
+      const available = new Set(evaluated); available.add(item.bindingName);
       for (const element of item.elements) {
-        if (element.kind === 'staticField') walkExpr(element.initializer, inspect);
-        if (element.kind === 'staticMethod' && element.result) walkExpr(element.result, inspect);
+        if (element.kind === 'staticField') walkExpr(element.initializer, inspect(available, item));
+        if (element.kind === 'staticMethod' && element.result) walkExpr(element.result, inspect(available));
       }
-    } else if (item.kind === 'console') item.args.forEach(e => walkExpr(e, inspect));
-    else if (item.kind === 'staticCall') walkExpr(item.call, inspect);
+      evaluated.add(item.bindingName);
+    } else if (item.kind === 'console') item.args.forEach(e => walkExpr(e, inspect(evaluated)));
+    else if (item.kind === 'staticCall') walkExpr(item.call, inspect(evaluated));
     else {
+      if (!evaluated.has(item.className)) fail('E_CLASS_TDZ', `Class '${item.className}' is not evaluated yet.`, item.span);
       const cls = classByName(item.className, item.span);
       if (cls.elements.some(e => e.kind === 'staticMethod' && e.name === item.property))
         fail('E_CLASS_METHOD_REPLACEMENT', 'Replacing a translated static method would invalidate the direct-method proof.', item.span);
       resolveField(item.className, item.property, item.span);
-      walkExpr(item.value, inspect);
+      walkExpr(item.value, inspect(evaluated));
     }
   }
   return { program, byName, traces, deferred, resolveField, resolveMethod };
