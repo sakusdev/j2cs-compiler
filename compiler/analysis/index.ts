@@ -52,6 +52,31 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     return new Map([...heap].map(([id, shape]) => [id, cloneShape(shape)]));
   }
   function currentInvocation(): InvocationContext | undefined { return invocations[invocations.length - 1]; }
+  function summarizeConstruction(context: InvocationContext, span: Node['span']): { types: TypeSet; shape: Shape } {
+    const outcomes = context.outcomes ?? [];
+    const receiverRef = context.receiverRef;
+    if (receiverRef === undefined || !outcomes.length)
+      fail('E_CONSTRUCTOR_ANALYSIS', 'Constructor completion summary is unavailable.', span);
+    const shapes: Shape[] = [], resultTypes: TypeSet[] = [];
+    for (const outcome of outcomes) {
+      if (outcome.returned.types.some(type => type !== 'Object' && type !== 'Array')) {
+        const receiver = outcome.heap.get(receiverRef);
+        if (!receiver) fail('E_CONSTRUCTOR_ANALYSIS', 'Constructor receiver escaped analyzable heap state.', span);
+        shapes.push(receiver); resultTypes.push(['Object']);
+      }
+      if (outcome.returned.types.some(type => type === 'Object' || type === 'Array')) {
+        if (!outcome.returned.refs?.length)
+          fail('E_CONSTRUCTOR_RETURN_OBJECT', 'Constructor object returns require compiler-owned identity.', span);
+        for (const ref of outcome.returned.refs) {
+          const returned = outcome.heap.get(ref);
+          if (!returned) fail('E_CONSTRUCTOR_RETURN_OBJECT', 'Constructor return identity escaped analyzable heap state.', span);
+          shapes.push(returned); resultTypes.push([returned.kind]);
+        }
+      }
+    }
+    if (!shapes.length) fail('E_CONSTRUCTOR_ANALYSIS', 'Constructor has no analyzable completion.', span);
+    return { types: union(...resultTypes), shape: mergeShapes(shapes) };
+  }
   function mergeShapes(shapes: Shape[]): Shape {
     if (!shapes.length) throw new Error('Cannot merge an empty constructor shape set.');
     const properties = new Map<string, ValueInfo>();
