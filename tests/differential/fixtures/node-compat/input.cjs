@@ -44,3 +44,14 @@ const writable = new Writable({
 writable.on('drain', () => { console.log('drain'); writable.end(); });
 writable.on('finish', () => console.log('finish'));
 console.log(writable.write(Buffer.from([2])));
+
+const duplex = new (require('node:stream').Duplex)({
+  readableHighWaterMark: 1,
+  writableHighWaterMark: 7,
+  allowHalfOpen: false,
+  read() {},
+  write(chunk, encoding, callback) { callback(); }
+});
+console.log(duplex.readableHighWaterMark, duplex.writableHighWaterMark, duplex.allowHalfOpen);
+console.log(duplex.push(Buffer.from([3])));
+console.log(duplex.read().toString('hex'));
