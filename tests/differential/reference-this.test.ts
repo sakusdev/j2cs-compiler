@@ -49,30 +49,31 @@ using J2cs.Runtime;
 internal static class Program
 {
     private static string Bool(bool value) => value ? "true" : "false";
+    private static void Print(bool value) => Console.Write(Bool(value) + "\\n");
     private static void Main()
     {
         var callableToken = JsValue.FromNumber(1d);
         var receiver = JsObject.DefineDataProperty(JsObject.Create(), "m", callableToken);
 
         var method = JsCallReference.FromProperty(receiver, "m");
-        Console.WriteLine(Bool(JsOperators.StrictEquals(
-            method.BindOrdinaryThis(JsThisMode.Strict, JsUndefined.Value), receiver)));
+        Print(JsOperators.StrictEquals(
+            method.BindOrdinaryThis(JsThisMode.Strict, JsUndefined.Value), receiver));
 
         var detached = JsCallReference.FromValue(method.Callee);
-        Console.WriteLine(Bool(detached.ThisArgument.Kind == JsKind.Undefined));
+        Print(detached.ThisArgument.Kind == JsKind.Undefined);
 
         var strictNull = JsCallReference.BindOrdinaryThis(JsNull.Value, JsThisMode.Strict, JsUndefined.Value);
-        Console.WriteLine(Bool(strictNull.Kind == JsKind.Null));
+        Print(strictNull.Kind == JsKind.Null);
 
         var strictNumber = JsCallReference.BindOrdinaryThis(JsValue.FromNumber(3d), JsThisMode.Strict, JsUndefined.Value);
-        Console.WriteLine(Bool(strictNumber.Kind == JsKind.Number && strictNumber.Number == 3d));
+        Print(strictNumber.Kind == JsKind.Number && strictNumber.Number == 3d);
 
         var globalThis = JsObject.Create();
         var sloppyNull = JsCallReference.BindOrdinaryThis(JsNull.Value, JsThisMode.Sloppy, globalThis);
-        Console.WriteLine(Bool(JsOperators.StrictEquals(sloppyNull, globalThis)));
+        Print(JsOperators.StrictEquals(sloppyNull, globalThis));
 
         var sloppyObject = JsCallReference.BindOrdinaryThis(receiver, JsThisMode.Sloppy, globalThis);
-        Console.WriteLine(Bool(JsOperators.StrictEquals(sloppyObject, receiver)));
+        Print(JsOperators.StrictEquals(sloppyObject, receiver));
     }
 }
 `;
@@ -99,11 +100,11 @@ internal static class Program
         {
             _ = JsCallReference.BindOrdinaryThis(
                 JsValue.FromNumber(3d), JsThisMode.Sloppy, JsObject.Create());
-            Console.WriteLine("unsafe");
+            Console.Write("unsafe\\n");
         }
         catch (InvalidOperationException)
         {
-            Console.WriteLine("deferred");
+            Console.Write("deferred\\n");
         }
     }
 }
