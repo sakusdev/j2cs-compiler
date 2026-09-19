@@ -43,6 +43,7 @@ Console.WriteLine(Bool(NodeStreams.Push(readable, NodeStreamChunk.FromBuffer(Nod
 var read = NodeStreams.Read(readable);
 Console.WriteLine(read!.Value.Buffer.ToString("hex"));
 NodeStreams.PushEof(readable);
+NodeStreams.Read(readable);
 
 var writable = NodeStreams.CreateWritable(scheduler, highWaterMark: 1);
 writable.On("drain", new NodeEventListener(_ =>
