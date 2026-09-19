@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "adapters": [
+    {
+      "ruleId": "node.module-resolution.dynamic-import",
+      "sha256": "ecd244773ad89c9e61ae923cdf4f8d37326ac376bc864880bffd6b432172bea4",
+      "construct": "dynamic-import",
+      "lowering": "JsDynamicModuleRuntime.DynamicImport"
+    },
+    {
+      "ruleId": "async.top-level-await",
+      "sha256": "25e90cdbefb3ec887048ff039e0d6334fdefe76401d5381feb8292e83f4b2f36",
+      "construct": "top-level-await",
+      "lowering": "JsDynamicModuleRuntime.EvaluateWithTopLevelAwait"
+    },
+    {
+      "ruleId": "modules.esm.evaluate-once",
+      "sha256": "dfaca413b2a23b81fc08df03e32cd51683f6e75f23ae9aab2a39f655ddc1aaaf",
+      "construct": "evaluate-once",
+      "lowering": "JsDynamicModuleRuntime.Evaluate"
+    },
+    {
+      "ruleId": "modules.esm.dependency-evaluation-order",
+      "sha256": "f7175da20aee24a1c0369ebb9309f16d53cb2a73802d4674a0d3c599856f7b7d",
+      "construct": "dependency-order",
+      "lowering": "JsDynamicModuleRuntime.Evaluate"
+    }
+  ]
+}
