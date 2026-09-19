@@ -4,10 +4,10 @@ import type { SemanticExpr as SE, SemanticForInitializer, SemanticFunction, Sema
 import { type Binding, type Bindings } from './bindings.js';
 import { exactly, hasReference, literalType, union, type TypeSet } from './facts.js';
 
-interface ValueInfo { types: TypeSet; refs?: readonly number[] }
+interface ValueInfo { types: TypeSet; refs?: readonly number[]; functionIds?: readonly number[] }
 interface Shape { kind: 'Object' | 'Array'; properties: Map<string, ValueInfo>; length?: number }
 type Environment = Map<number, ValueInfo>;
-interface Flow { env: Environment; heap: Map<number, Shape>; reachable: boolean; returns: TypeSet[]; loopDepth: number }
+interface Flow { env: Environment; heap: Map<number, Shape>; reachable: boolean; returns: ValueInfo[]; loopDepth: number; owner: number }
 interface State { env: Environment; heap: Map<number, Shape> }
 interface LoopControl { breaks: State[]; continues: State[] }
 const MAX_LOOP_FIXPOINT = 16;
@@ -21,18 +21,34 @@ const arrayPrototypeKeys = new Set(['at', 'concat', 'copyWithin', 'entries', 'ev
   'splice', 'toLocaleString', 'toReversed', 'toSorted', 'toSpliced', 'toString', 'unshift', 'values', 'with']);
 
 export function analyze(program: Program, bindings: Bindings): SemanticProgram {
-  const instances: SemanticFunction[] = [], cache = new Map<string, SemanticFunction>(), active = new Set<number>();
+  const instances: SemanticFunction[] = [], cache = new Map<string, SemanticFunction>();
+  const summaries = new Map<number, ValueInfo>();
+  const functionById = new Map(bindings.functions.map(b => [b.id, b]));
   let nextInstance = 0;
   const syntheticUndefined = (n: Node): SE => ({ ...n, kind: 'literal', value: undefined, types: ['Undefined'] });
-  const valueOf = (e: SE): ValueInfo => ({ types: e.types, ...(e.refs ? { refs: e.refs } : {}) });
-  const cloneValue = (v: ValueInfo): ValueInfo => ({ types: v.types, ...(v.refs ? { refs: [...v.refs] } : {}) });
+  const valueOf = (e: SE): ValueInfo => ({ types: e.types, ...(e.refs ? { refs: e.refs } : {}),
+    ...(e.functionIds ? { functionIds: e.functionIds } : {}) });
+  const cloneValue = (v: ValueInfo): ValueInfo => ({ types: v.types, ...(v.refs ? { refs: [...v.refs] } : {}),
+    ...(v.functionIds ? { functionIds: [...v.functionIds] } : {}) });
   const withValue = <T extends object>(node: T, value: ValueInfo): T & ValueInfo =>
     ({ ...node, types: value.types, ...(value.refs ? { refs: value.refs } : {}) });
 
   function unionValue(...values: ValueInfo[]): ValueInfo {
     const types = union(...values.map(v => v.types));
     const refs = [...new Set(values.flatMap(v => v.refs ?? []))].sort((a, b) => a - b);
-    return { types, ...(refs.length ? { refs } : {}) };
+    const functionIds = [...new Set(values.flatMap(v => v.functionIds ?? []))].sort((a, b) => a - b);
+    return { types, ...(refs.length ? { refs } : {}), ...(functionIds.length ? { functionIds } : {}) };
+  }
+  function functionValue(binding: Binding): ValueInfo { return { types: ['Function'], functionIds: [binding.id] }; }
+  function record(binding: Binding, value: ValueInfo): void {
+    const old = summaries.get(binding.id);
+    summaries.set(binding.id, old ? unionValue(old, value) : cloneValue(value));
+  }
+  function applyCapturedSummaries(f: Flow): void {
+    for (const id of bindings.capturedIds) {
+      const current = f.env.get(id), summary = summaries.get(id);
+      if (current && summary) f.env.set(id, unionValue(current, summary));
+    }
   }
   function cloneEnv(env: Environment): Environment {
     return new Map([...env].map(([id, v]) => [id, cloneValue(v)]));
@@ -73,9 +89,10 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   }
   function widen(base: State, paths: State[]): State { return joinStates(base, [base, ...paths]); }
   function sameValue(a: ValueInfo, b: ValueInfo): boolean {
-    const ar=a.refs??[], br=b.refs??[];
+    const ar=a.refs??[], br=b.refs??[], af=a.functionIds??[], bf=b.functionIds??[];
     return a.types.length===b.types.length && a.types.every((t,i)=>t===b.types[i])
-      && ar.length===br.length && ar.every((x,i)=>x===br[i]);
+      && ar.length===br.length && ar.every((x,i)=>x===br[i])
+      && af.length===bf.length && af.every((x,i)=>x===bf[i]);
   }
   function sameEnv(a: Environment, b: Environment): boolean {
     if (a.size !== b.size) return false;
