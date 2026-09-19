@@ -1,0 +1,6 @@
+node_modules/
+dist/
+artifacts/
+**/bin/
+**/obj/
+*.tsbuildinfo

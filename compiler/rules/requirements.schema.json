@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sakusdev/j2cs-compiler/compiler/rules/requirements.schema.json",
+  "title": "j2cs source.requirements.$j2cs extension v1",
+  "type": "object",
+  "required": ["version", "predicate"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "predicate": { "$ref": "#/$defs/predicate" }
+  },
+  "$defs": {
+    "predicate": {
+      "oneOf": [
+        { "type": "object", "required": ["fact", "equals"], "additionalProperties": false,
+          "properties": { "fact": { "type": "string" }, "equals": { "type": ["string", "number", "boolean"] } } },
+        { "type": "object", "required": ["fact", "contains"], "additionalProperties": false,
+          "properties": { "fact": { "type": "string" }, "contains": { "type": "string" } } },
+        { "type": "object", "required": ["fact", "subsetOf"], "additionalProperties": false,
+          "properties": { "fact": { "type": "string" }, "subsetOf": { "type": "array", "items": { "type": "string" } } } },
+        { "type": "object", "required": ["fact", "exists"], "additionalProperties": false,
+          "properties": { "fact": { "type": "string" }, "exists": { "const": true } } },
+        { "type": "object", "required": ["equalFacts"], "additionalProperties": false,
+          "properties": { "equalFacts": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "string" } } } },
+        { "type": "object", "required": ["all"], "additionalProperties": false,
+          "properties": { "all": { "type": "array", "items": { "$ref": "#/$defs/predicate" } } } },
+        { "type": "object", "required": ["any"], "additionalProperties": false,
+          "properties": { "any": { "type": "array", "items": { "$ref": "#/$defs/predicate" } } } },
+        { "type": "object", "required": ["not"], "additionalProperties": false,
+          "properties": { "not": { "$ref": "#/$defs/predicate" } } }
+      ]
+    }
+  }
+}

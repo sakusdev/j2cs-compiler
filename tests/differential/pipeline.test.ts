@@ -1,0 +1,104 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createCompiler } from '../../compiler/index.js';
+import { differential, type Fixture } from './harness.js';
+const index = await createCompiler();
+const fixtures: Fixture[] = [
+  { name: 'required-mvp', source: 'const x = 10; const y = x + 20; console.log(y);', stdout: '30\n' },
+  { name: 'literals-and-bindings', source: `
+    const n = null; let uninitialized; const flag = true; const text = 'こんにちは';
+    console.log(10, 'text', flag, false, n, uninitialized); console.log(text);
+    { const text = 'inner'; console.log(text); } console.log(text);
+    let x = 1; console.log(x = 2, x); x = 'changed'; console.log(x); 1 + 2;
+  ` },
+  { name: 'binary64-arithmetic', source: `
+    console.log(7 / 2, 7 - 2, 3 * 4, -5 % 2, 5 % -2);
+    console.log(0.1 + 0.2, 9007199254740992 + 1, 1 / 0, 0 / 0, 1 / -0);
+    console.log(-0, -(-0), -Infinity, Infinity - Infinity, 1e308 * 10);
+    console.log(NaN < 1, NaN <= 1, NaN > 1, NaN >= 1, NaN === NaN, 0 === -0);
+    console.log(2 < 3, 2 <= 2, 5 > 3, 5 >= 5, 2 !== 3, 2 === 2);
+  ` },
+  { name: 'strings-and-coercing-addition', source: `
+    console.log('ab' + 'cd'); console.log('5' + 1); console.log(1 + '5');
+    console.log(true + 1, null + 1, undefined + 1);
+    console.log('x' + null); console.log('x' + undefined); console.log('x' + false); console.log('x' + -0);
+    console.log('é' === 'e\\u0301', 'x' === 'x', true === false, null === null);
+    console.log(null === undefined, 1 === '1', NaN !== NaN, undefined === undefined);
+    console.log('\\ud83d' + '\\ude00'); console.log('\\ud800'); console.log('a\\u0000b');
+    console.log('%s'); console.log(); console.log('plain', 1, null, true);
+  ` },
+  { name: 'truthiness-and-flow-joins', source: `
+    if (0) console.log('bad'); else console.log('zero');
+    if (-0) console.log('bad'); else console.log('negative-zero');
+    if (NaN) console.log('bad'); else console.log('nan');
+    if ('') console.log('bad'); else console.log('empty');
+    if (null) console.log('bad'); else console.log('null');
+    if (undefined) console.log('bad'); else console.log('undefined');
+    if ('hello') console.log('truthy'); if (1) { console.log('one'); }
+    if (false) console.log('bad'); else if (true) console.log('bool');
+    console.log(!0, !1, !'', !'x', !null, !undefined, !NaN, !true);
+    let v; if (true) v = 5; else v = 's'; console.log(v + 1);
+    if (v) console.log('joined-truthy'); console.log(v === 5);
+    let w = 1; if (false) w = 's'; console.log(w + 1);
+  ` },
+  { name: 'functions-and-returns', source: `
+    console.log(add(10, 20));
+    function add(a, b) { return a + b; }
+    console.log(add('a', 'b')); console.log(add(true, 1));
+    function arithmetic(a,b) { let x = a; x = x * b; return x / 2 - 1; }
+    console.log(arithmetic(3,4));
+    function choose(x) { if (x) return 'yes'; return null; }
+    function partial(x) { if (x) return 42; }
+    function empty() { return; }
+    function fallthrough() { const x = 1; }
+    function nestedCall(x) { return add(x, 1); }
+    console.log(choose(true)); console.log(choose(false));
+    console.log(partial(false), partial(true), empty(), fallthrough(), nestedCall(4));
+  ` },
+  { name: 'evaluation-order', source: `
+    function mark(x) { console.log(x); return x; }
+    function combine(a,b) { return a*10+b; }
+    console.log(combine(mark(1), mark(2)));
+    console.log(mark(3) + mark(4));
+    let x = 1; console.log(x, x = 2, x); console.log(x + (x = 3));
+    let y = 1; console.log(y + (y = 'x')); console.log(y);
+    if (x = 0) console.log('bad'); else console.log(x);
+  ` },
+  { name: 'intrinsic-shadowing', source: `
+    const NaN = 5; const Infinity = 10; let undefined = 'local';
+    console.log(NaN, Infinity, undefined);
+    function f(NaN, Infinity, undefined) { return NaN + Infinity + undefined; }
+    console.log(f(1, 2, 3));
+  ` },
+  { name: 'typescript-erasure', extension: 'ts', source: `
+    const x: number = 10; let y: number = x + 20;
+    function twice(v: number): number { return v * 2; } console.log(twice(y));
+    const misleading: number = 'string'; console.log(misleading + 1);
+  ` },
+  { name: 'observable-results', source: 'function calculate(a,b) { return a / b; } const result = calculate(7, 2);',
+    observe: ['result', 'result === 3.5', '1 / -0', 'null === undefined', "'a' + 1"] },
+];
+for (const fixture of fixtures) {
+  test(`Node vs generated C#: ${fixture.name}`, { timeout: 90_000 }, async () => {
+    const r = await differential(index, fixture);
+    assert.equal(r.node.exit, 0);
+    if (fixture.name === 'required-mvp') {
+      assert.ok(r.result.trace.some(t => t.ruleId === 'operators.addition.number' && t.strategy === 'native'));
+      assert.ok(!/\bdynamic\b|\bobject\b/.test(r.result.source));
+    }
+  });
+}
+// One project exercises many binary64 decimal boundaries and random bit patterns.
+// This catches Node-vs-.NET formatting differences that ordinary integer samples miss.
+test('Node vs generated C#: binary64 formatting corpus', { timeout: 90_000 }, async () => {
+  const numbers = [1e-7, 1e-6, 1e-5, 1e20, 1e21, 1e23, 1.0000000000000001e18,
+    Number.MIN_VALUE, Number.MAX_VALUE, 2.2250738585072014e-308, 100.00000000000001];
+  let state = 0x123456789abcdef0n;
+  const bytes = new ArrayBuffer(8), view = new DataView(bytes);
+  for (let i = 0; i < 256; i++) {
+    state = BigInt.asUintN(64, state * 6364136223846793005n + 1442695040888963407n);
+    view.setBigUint64(0, state);
+    const n = view.getFloat64(0); if (Number.isFinite(n)) numbers.push(n);
+  }
+  await differential(index, { name: 'number-formatting', source: numbers.map(n => `console.log(${n});`).join('\n') });
+});

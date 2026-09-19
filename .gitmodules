@@ -1,0 +1,3 @@
+[submodule "rule-db"]
+	path = rule-db
+	url = https://github.com/sakusdev/j2cs.git
