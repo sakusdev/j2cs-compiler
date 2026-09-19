@@ -31,7 +31,7 @@ test('module subsystem is connected to canonical pinned j2cs contracts', () => {
   assert.equal(new Set(proofs.map(proof => proof.ruleId)).size, proofs.length);
   for (const proof of proofs) {
     assert.match(proof.sha256, /^[0-9a-f]{64}$/);
-    assert.match(proof.file, /^rules\/.*\.json$/);
+    assert.match(proof.file, /^rules[\\/].*\.json$/);
     assert.ok(['helper', 'runtime'].includes(proof.strategy));
   }
 });
