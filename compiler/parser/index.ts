@@ -107,7 +107,8 @@ export function parse(source: string, file = 'input.js'): Program {
     }
     if (ts.isCallExpression(n)) {
       if (n.questionDotToken || n.typeArguments?.length) unsupported(n, 'Optional/generic call');
-      return { ...m, kind: 'call', callee: expr(n.expression), args: n.arguments.map(expr) };
+      return { ...m, kind: 'call', callee: expr(n.expression), args: n.arguments.map(a =>
+        ts.isSpreadElement(a) ? { ...meta(a), kind: 'spread' as const, operand: expr(a.expression) } : expr(a)) };
     }
     return unsupported(n);
   }
@@ -165,11 +166,14 @@ export function parse(source: string, file = 'input.js'): Program {
       if (!n.name || !n.body || n.asteriskToken || n.modifiers?.length || n.typeParameters?.length)
         unsupported(n, 'Async/generator/ambient/exported/generic function');
       annotation(n.type);
-      const params = n.parameters.map(p => {
-        if (!ts.isIdentifier(p.name) || p.initializer || p.dotDotDotToken || p.questionToken || p.modifiers?.length)
-          unsupported(p, 'Default/rest/optional/destructured parameter');
+      const params = n.parameters.map((p, i) => {
+        if (!ts.isIdentifier(p.name) || p.questionToken || p.modifiers?.length)
+          unsupported(p, 'Optional/destructured/parameter-property parameter');
+        if (p.dotDotDotToken && i !== n.parameters.length - 1) unsupported(p, 'Non-final rest parameter');
+        if (p.dotDotDotToken && p.initializer) unsupported(p, 'Rest parameter with initializer');
         annotation(p.type);
-        return { ...meta(p), name: p.name.text };
+        return { ...meta(p), name: p.name.text, initializer: p.initializer && expr(p.initializer),
+          rest: !!p.dotDotDotToken };
       });
       return [{ ...m, kind: 'function', name: n.name.text, params,
         body: statement(n.body)[0] as Statement & { kind: 'block' } }];
