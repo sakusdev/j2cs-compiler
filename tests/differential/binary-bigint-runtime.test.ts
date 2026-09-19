@@ -74,11 +74,11 @@ Console.WriteLine($"{S(JsBinary.DataViewGet(dv, JsDataViewKind.Uint16, JsBinaryV
 
 Console.WriteLine((JsBigInt.ParseLiteral("123456789012345678901234567890").Value + JsBigInt.ParseLiteral("10").Value).ToString(System.Globalization.CultureInfo.InvariantCulture) + "n");
 Console.WriteLine($"{JsBigInt.Divide(JsBigInt.ParseLiteral("-7"), JsBigInt.ParseLiteral("3"))}n {JsBigInt.Remainder(JsBigInt.ParseLiteral("-7"), JsBigInt.ParseLiteral("3"))}n {JsBigInt.Exponentiate(JsBigInt.ParseLiteral("2"), JsBigInt.ParseLiteral("20"))}n");
-Console.WriteLine($"{JsBigInt.BigIntFunctionPrimitive(JsBinaryValue.FromNumber(42))}n {JsBigInt.BigIntFunctionPrimitive(JsBinaryValue.FromBoolean(true))}n {JsBigInt.BigIntFunctionPrimitive(JsBinaryValue.FromString("0x10"))}n");
+Console.WriteLine($"{JsCoercion.BigIntFunctionPrimitive(JsBinaryValue.FromNumber(42))}n {JsCoercion.BigIntFunctionPrimitive(JsBinaryValue.FromBoolean(true))}n {JsCoercion.BigIntFunctionPrimitive(JsBinaryValue.FromString("0x10"))}n");
 
 foreach (var f in new Func<JsBigInt>[] {
-    () => JsBigInt.BigIntFunctionPrimitive(JsBinaryValue.FromNumber(1.5)),
-    () => JsBigInt.BigIntFunctionPrimitive(JsBinaryValue.FromString("1.5")),
+    () => JsCoercion.BigIntFunctionPrimitive(JsBinaryValue.FromNumber(1.5)),
+    () => JsCoercion.BigIntFunctionPrimitive(JsBinaryValue.FromString("1.5")),
 }) {
     try { _ = f(); } catch (JsBinaryBigIntException e) { Console.WriteLine(e.Name); }
 }
