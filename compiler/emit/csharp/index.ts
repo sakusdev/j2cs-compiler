@@ -1,6 +1,6 @@
 import type { CsExpr, CsProgram, CsStatement } from '../../ir/csharp.js';
 const ident = (s: string): string => {
-  if (!/^(?:b|F)\d+$/.test(s)) throw new Error(`Invalid generated identifier ${s}`);
+  if (!/^(?:b|F|K|t|r)\d+$/.test(s)) throw new Error(`Invalid generated identifier ${s}`);
   return s;
 };
 function quote(value: string): string {
@@ -26,7 +26,8 @@ const calls = new Set(['JsValue.IsTruthy', 'JsOperators.Add', 'JsOperators.Stric
   'JsReference.DivideAssignNumber', 'JsReference.RemainderAssignNumber', 'JsReference.PrefixIncrementNumber',
   'JsReference.PostfixIncrementNumber', 'JsReference.PrefixDecrementNumber', 'JsReference.PostfixDecrementNumber',
   'JsConsole.Log', 'string.Concat', 'JsObject.Create', 'JsObject.DefineDataProperty', 'JsObject.GetProperty',
-  'JsObject.SetProperty', 'JsObject.HasOwn', 'JsArray.Create', 'JsArray.DefineElement', 'JsArray.Length', 'JsArray.Push']);
+  'JsObject.SetProperty', 'JsObject.HasOwn', 'JsArray.Create', 'JsArray.DefineElement', 'JsArray.Length', 'JsArray.Push',
+  'JsConstructor.Identity', 'JsConstructor.CreateReceiver', 'JsConstructor.SelectResult']);
 function expr(e: CsExpr): string {
   switch (e.kind) {
     case 'literal': return e.repr === 'number' ? number(e.value) : e.repr === 'string' ? quote(e.value) : String(e.value);
