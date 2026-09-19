@@ -116,7 +116,7 @@ Console.WriteLine(string.Join("|", incoming.GetDistinct("x-a")));
 Console.WriteLine(cookie.Single);
 
 var lookup = await NodeDns.LookupAsync("127.0.0.1");
-Console.WriteLine($"{lookup.Address} {lookup.Family}");
+Console.WriteLine(lookup.Address + " " + lookup.Family);
 
 await using var server = new NodeTcpServer();
 Print(server.Address is null);
