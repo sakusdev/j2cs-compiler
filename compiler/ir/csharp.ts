@@ -16,6 +16,11 @@ export type CsStatement =
   | { kind: 'expression'; expression: CsExpr }
   | { kind: 'block'; body: CsStatement[] }
   | { kind: 'if'; condition: CsExpr; then: CsStatement; otherwise?: CsStatement }
+  | { kind: 'while'; condition: CsExpr; body: CsStatement }
+  | { kind: 'doWhile'; body: CsStatement; condition: CsExpr }
+  | { kind: 'for'; condition?: CsExpr; update?: CsExpr; body: CsStatement }
+  | { kind: 'break' }
+  | { kind: 'continue' }
   | { kind: 'return'; value: CsExpr };
 export interface CsFunction { name: string; params: string[]; body: CsStatement[] }
 export interface CsProgram { body: CsStatement[]; functions: CsFunction[] }

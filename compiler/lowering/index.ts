@@ -13,6 +13,8 @@ export interface Trace {
 export interface LoweredProgram { ir: CsProgram; trace: Trace[]; structuralContracts: string[] }
 const variable = (b: Binding): string => `b${b.id}`;
 const call = (target: string, args: CE[], repr: CE['repr'] = 'value'): CE => ({ kind: 'call', target, args, repr });
+const read = (b: Binding): CE => ({ kind: 'read', repr: 'value', name: variable(b) });
+const ref = (b: Binding): CE => ({ kind: 'ref', repr: 'value', name: variable(b) });
 const undef = (): CE => ({ kind: 'member', repr: 'value', name: 'JsUndefined.Value' });
 export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgram {
   const trace: Trace[] = [], contracts = new Set<string>();
@@ -53,7 +55,32 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
       case 'assign': {
         const op = select({ kind: 'assign' }, facts, e.span);
         if (op !== 'helper.assign') fail('E_LOWERING', 'Assignment adapter has no implementation.', e.span);
-        return call('JsReference.Assign', [{ kind: 'ref', repr: 'value', name: variable(e.binding) }, expression(e.value)]);
+        return call('JsReference.Assign', [ref(e.binding), expression(e.value)]);
+      }
+      case 'compound': {
+        const op = select({ kind: 'compound', operator: e.op }, facts, e.span);
+        const target = {
+          'helper.addAssign': 'JsReference.AddAssign',
+          'helper.subtractAssignNumber': 'JsReference.SubtractAssignNumber',
+          'helper.multiplyAssignNumber': 'JsReference.MultiplyAssignNumber',
+          'helper.divideAssignNumber': 'JsReference.DivideAssignNumber',
+          'helper.remainderAssignNumber': 'JsReference.RemainderAssignNumber',
+        }[op];
+        if (!target) return fail('E_LOWERING', `Unimplemented compound lowering ${op}.`, e.span);
+        // C# evaluates arguments left-to-right: capture GetValue before evaluating RHS.
+        return call(target, [ref(e.binding), read(e.binding), expression(e.value)]);
+      }
+      case 'update': {
+        const selectorOp = `${e.prefix ? 'prefix' : 'postfix'}${e.op}`;
+        const op = select({ kind: 'update', operator: selectorOp }, facts, e.span);
+        const target = {
+          'helper.prefixIncrementNumber': 'JsReference.PrefixIncrementNumber',
+          'helper.postfixIncrementNumber': 'JsReference.PostfixIncrementNumber',
+          'helper.prefixDecrementNumber': 'JsReference.PrefixDecrementNumber',
+          'helper.postfixDecrementNumber': 'JsReference.PostfixDecrementNumber',
+        }[op];
+        if (!target) return fail('E_LOWERING', `Unimplemented update lowering ${op}.`, e.span);
+        return call(target, [ref(e.binding), read(e.binding)]);
       }
       case 'binary': {
         const op = select({ kind: 'binary', operator: e.op }, facts, e.span);
@@ -101,6 +128,19 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
       case 'expression': return { kind: 'expression', expression: expression(s.expression) };
       case 'block': return { kind: 'block', body: s.body.map(statement) };
       case 'if': return { kind: 'if', condition: condition(s.condition), then: statement(s.then), otherwise: s.otherwise && statement(s.otherwise) };
+      case 'while': contracts.add('core.loop.while'); return { kind: 'while', condition: condition(s.condition), body: statement(s.body) };
+      case 'doWhile': contracts.add('core.loop.do-while'); return { kind: 'doWhile', body: statement(s.body), condition: condition(s.condition) };
+      case 'for': {
+        contracts.add('core.loop.for');
+        const loop: CS = { kind: 'for', condition: s.condition && condition(s.condition), update: s.update && expression(s.update), body: statement(s.body) };
+        if (!s.initializer) return loop;
+        const init = s.initializer.kind === 'variables'
+          ? s.initializer.declarations.map(statement)
+          : [{ kind: 'expression' as const, expression: expression(s.initializer.expression) }];
+        return { kind: 'block', body: [...init, loop] };
+      }
+      case 'break': contracts.add('core.loop.break'); return { kind: 'break' };
+      case 'continue': contracts.add('core.loop.continue'); return { kind: 'continue' };
       case 'return':
         if (s.value.kind === 'literal' && s.value.value === undefined) {
           select({ kind: 'return.undefined' }, programFacts().prove('return.representation', 'value', 'Observable tagged return convention'), s.span);

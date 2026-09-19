@@ -255,6 +255,175 @@
         "kind": "condition"
       },
       "lowering": "helper.truthiness"
+    },
+    {
+      "ruleId": "operators.addition-assignment",
+      "sha256": "01760aee3699299f5a313bf43a07b86f9054bd2cf7dfa1f33ce16b46de9465d1",
+      "selector": {
+        "kind": "compound",
+        "operator": "+="
+      },
+      "lowering": "helper.addAssign"
+    },
+    {
+      "ruleId": "operators.subtraction-assignment",
+      "sha256": "91abf6959473a776fbdc74029b58bc96980bf1a5eac19aca874551acb6da84b1",
+      "selector": {
+        "kind": "compound",
+        "operator": "-="
+      },
+      "lowering": "helper.subtractAssignNumber",
+      "requires": [
+        {
+          "fact": "left.types",
+          "subsetOf": [
+            "Number"
+          ]
+        },
+        {
+          "fact": "right.types",
+          "subsetOf": [
+            "Number"
+          ]
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.multiplication-assignment",
+      "sha256": "52b334deecb0b2d7daef9e433f67a63d37db855174cf5596497b59903c55344b",
+      "selector": {
+        "kind": "compound",
+        "operator": "*="
+      },
+      "lowering": "helper.multiplyAssignNumber",
+      "requires": [
+        {
+          "fact": "left.types",
+          "subsetOf": [
+            "Number"
+          ]
+        },
+        {
+          "fact": "right.types",
+          "subsetOf": [
+            "Number"
+          ]
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.division-assignment",
+      "sha256": "0db573fcdde36397c172119e13af1faa6e0b0c0435fc18767ebb0db93123a9ee",
+      "selector": {
+        "kind": "compound",
+        "operator": "/="
+      },
+      "lowering": "helper.divideAssignNumber",
+      "requires": [
+        {
+          "fact": "left.types",
+          "subsetOf": [
+            "Number"
+          ]
+        },
+        {
+          "fact": "right.types",
+          "subsetOf": [
+            "Number"
+          ]
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.remainder-assignment",
+      "sha256": "30ceeb05c4eefddc8d4f115619079c731f29222be38a6068a46bd97a08e403be",
+      "selector": {
+        "kind": "compound",
+        "operator": "%="
+      },
+      "lowering": "helper.remainderAssignNumber",
+      "requires": [
+        {
+          "fact": "left.types",
+          "subsetOf": [
+            "Number"
+          ]
+        },
+        {
+          "fact": "right.types",
+          "subsetOf": [
+            "Number"
+          ]
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.prefix-increment",
+      "sha256": "872400353f2d136e9840b1c581e66459b0cd3e7bd5f7082450c66c9d4ae12ad5",
+      "selector": {
+        "kind": "update",
+        "operator": "prefix++"
+      },
+      "lowering": "helper.prefixIncrementNumber",
+      "requires": [
+        {
+          "fact": "operand.types",
+          "subsetOf": [
+            "Number"
+          ]
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.postfix-increment",
+      "sha256": "5b6448d88abc6e7d9334bf5d0da9b6ca1afaf62a08ab46fce8ddb579cee25c99",
+      "selector": {
+        "kind": "update",
+        "operator": "postfix++"
+      },
+      "lowering": "helper.postfixIncrementNumber",
+      "requires": [
+        {
+          "fact": "operand.types",
+          "subsetOf": [
+            "Number"
+          ]
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.prefix-decrement",
+      "sha256": "313bdc7f15ac96d905390d783d219e385ba5666b10e771e074adcdf3ca6d3f02",
+      "selector": {
+        "kind": "update",
+        "operator": "prefix--"
+      },
+      "lowering": "helper.prefixDecrementNumber",
+      "requires": [
+        {
+          "fact": "operand.types",
+          "subsetOf": [
+            "Number"
+          ]
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.postfix-decrement",
+      "sha256": "0da438833b8e7d0b752f82afbd45635a9e6bc121d7eb8bca3057ae4f43f2a6b5",
+      "selector": {
+        "kind": "update",
+        "operator": "postfix--"
+      },
+      "lowering": "helper.postfixDecrementNumber",
+      "requires": [
+        {
+          "fact": "operand.types",
+          "subsetOf": [
+            "Number"
+          ]
+        }
+      ]
     }
   ]
 }

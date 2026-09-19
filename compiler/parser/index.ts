@@ -1,7 +1,7 @@
 import ts from 'typescript';
 import { Script } from 'node:vm';
 import { fail } from '../diagnostics/index.js';
-import type { Expr, Node, Program, Statement } from './ast.js';
+import type { Expr, ForInitializer, Node, Program, Statement, VariableStatement } from './ast.js';
 
 /** The only compiler module that knows TypeScript's AST. Annotations are erased, never proofs. */
 export function parse(source: string, file = 'input.js'): Program {
@@ -24,7 +24,6 @@ export function parse(source: string, file = 'input.js'): Program {
   function annotation(n: ts.TypeNode | undefined): void {
     if (!n) return;
     if (!file.endsWith('.ts')) unsupported(n, 'Type annotation in JavaScript');
-    // Purely erasable scalar annotations only. They do not narrow runtime facts.
     if (![ts.SyntaxKind.NumberKeyword, ts.SyntaxKind.StringKeyword, ts.SyntaxKind.BooleanKeyword,
       ts.SyntaxKind.AnyKeyword, ts.SyntaxKind.UnknownKeyword, ts.SyntaxKind.VoidKeyword,
       ts.SyntaxKind.UndefinedKeyword].includes(n.kind)) unsupported(n, 'This TypeScript annotation');
@@ -45,13 +44,30 @@ export function parse(source: string, file = 'input.js'): Program {
         if (target.kind !== 'identifier') unsupported(n.left, 'Property/destructuring assignment');
         return { ...m, kind: 'assign', target, value: expr(n.right) };
       }
+      if (['+=', '-=', '*=', '/=', '%='].includes(op)) {
+        const target = expr(n.left);
+        if (target.kind !== 'identifier') unsupported(n.left, 'Property/destructuring compound assignment');
+        return { ...m, kind: 'compound', op: op as '+=' | '-=' | '*=' | '/=' | '%=', target, value: expr(n.right) };
+      }
       if (!['+', '-', '*', '/', '%', '<', '<=', '>', '>=', '===', '!=='].includes(op)) unsupported(n, `Operator ${op}`);
       return { ...m, kind: 'binary', op, left: expr(n.left), right: expr(n.right) };
     }
     if (ts.isPrefixUnaryExpression(n)) {
       const op = ts.tokenToString(n.operator)!;
+      if (op === '++' || op === '--') {
+        const target = expr(n.operand);
+        if (target.kind !== 'identifier') unsupported(n.operand, 'Property update');
+        return { ...m, kind: 'update', op, prefix: true, target };
+      }
       if (!['-', '!'].includes(op)) unsupported(n, `Unary operator ${op}`);
       return { ...m, kind: 'unary', op, operand: expr(n.operand) };
+    }
+    if (ts.isPostfixUnaryExpression(n)) {
+      const op = ts.tokenToString(n.operator)!;
+      if (op !== '++' && op !== '--') unsupported(n, `Postfix operator ${op}`);
+      const target = expr(n.operand);
+      if (target.kind !== 'identifier') unsupported(n.operand, 'Property update');
+      return { ...m, kind: 'update', op, prefix: false, target };
     }
     if (ts.isPropertyAccessExpression(n)) {
       if (n.questionDotToken) unsupported(n, 'Optional property access');
@@ -63,30 +79,54 @@ export function parse(source: string, file = 'input.js'): Program {
     }
     return unsupported(n);
   }
+  function variables(list: ts.VariableDeclarationList): VariableStatement[] {
+    const flags = list.flags;
+    const mode = flags & ts.NodeFlags.Const ? 'const' : flags & ts.NodeFlags.Let ? 'let' : undefined;
+    if (!mode || flags & ts.NodeFlags.Using) unsupported(list, 'var/using declaration');
+    return list.declarations.map(d => {
+      if (!ts.isIdentifier(d.name) || d.exclamationToken) unsupported(d, 'Destructuring/definite assignment declaration');
+      annotation(d.type);
+      if (mode === 'const' && !d.initializer) fail('E_CONST_INIT', 'const requires an initializer.', meta(d).span);
+      return { ...meta(d), kind: 'variable', mode, name: d.name.text, initializer: d.initializer && expr(d.initializer) };
+    });
+  }
+  function controlledBody(n: ts.Statement): Statement {
+    if (ts.isVariableStatement(n) || ts.isFunctionDeclaration(n)) unsupported(n, 'Unbraced lexical/function declaration');
+    return statement(n)[0]!;
+  }
   function statement(n: ts.Statement): Statement[] {
     const m = meta(n);
     if (ts.isVariableStatement(n)) {
       if (n.modifiers?.length) unsupported(n, 'Exported/ambient variable');
-      const flags = n.declarationList.flags;
-      const mode = flags & ts.NodeFlags.Const ? 'const' : flags & ts.NodeFlags.Let ? 'let' : undefined;
-      if (!mode || flags & ts.NodeFlags.Using) unsupported(n, 'var/using declaration');
-      return n.declarationList.declarations.map(d => {
-        if (!ts.isIdentifier(d.name) || d.exclamationToken) unsupported(d, 'Destructuring/definite assignment declaration');
-        annotation(d.type);
-        if (mode === 'const' && !d.initializer) fail('E_CONST_INIT', 'const requires an initializer.', meta(d).span);
-        return { ...meta(d), kind: 'variable', mode, name: d.name.text, initializer: d.initializer && expr(d.initializer) };
-      });
+      return variables(n.declarationList);
     }
     if (ts.isBlock(n)) return [{ ...m, kind: 'block', body: n.statements.flatMap(statement) }];
     if (ts.isExpressionStatement(n)) return [{ ...m, kind: 'expression', expression: expr(n.expression) }];
     if (ts.isEmptyStatement(n)) return [{ ...m, kind: 'empty' }];
     if (ts.isIfStatement(n)) {
-      // Lexical declarations in a single-statement arm are early errors in JavaScript.
-      for (const arm of [n.thenStatement, n.elseStatement]) {
-        if (arm && (ts.isVariableStatement(arm) || ts.isFunctionDeclaration(arm))) unsupported(arm, 'Unbraced lexical/function declaration');
+      return [{ ...m, kind: 'if', condition: expr(n.expression), then: controlledBody(n.thenStatement),
+        otherwise: n.elseStatement && controlledBody(n.elseStatement) }];
+    }
+    if (ts.isWhileStatement(n)) return [{ ...m, kind: 'while', condition: expr(n.expression), body: controlledBody(n.statement) }];
+    if (ts.isDoStatement(n)) return [{ ...m, kind: 'doWhile', body: controlledBody(n.statement), condition: expr(n.expression) }];
+    if (ts.isForInStatement(n) || ts.isForOfStatement(n)) return unsupported(n, 'for-in/for-of');
+    if (ts.isForStatement(n)) {
+      let initializer: ForInitializer | undefined;
+      if (n.initializer) {
+        initializer = ts.isVariableDeclarationList(n.initializer)
+          ? { ...meta(n.initializer), kind: 'variables', declarations: variables(n.initializer) }
+          : { ...meta(n.initializer), kind: 'expression', expression: expr(n.initializer) };
       }
-      return [{ ...m, kind: 'if', condition: expr(n.expression), then: statement(n.thenStatement)[0]!,
-        otherwise: n.elseStatement && statement(n.elseStatement)[0]! }];
+      return [{ ...m, kind: 'for', initializer, condition: n.condition && expr(n.condition),
+        update: n.incrementor && expr(n.incrementor), body: controlledBody(n.statement) }];
+    }
+    if (ts.isBreakStatement(n)) {
+      if (n.label) unsupported(n, 'Labeled break');
+      return [{ ...m, kind: 'break' }];
+    }
+    if (ts.isContinueStatement(n)) {
+      if (n.label) unsupported(n, 'Labeled continue');
+      return [{ ...m, kind: 'continue' }];
     }
     if (ts.isReturnStatement(n)) return [{ ...m, kind: 'return', value: n.expression && expr(n.expression) }];
     if (ts.isFunctionDeclaration(n)) {
@@ -105,9 +145,6 @@ export function parse(source: string, file = 'input.js'): Program {
     return unsupported(n);
   }
   const body = sf.statements.flatMap(statement);
-  // TypeScript's parser accepts some early-error programs. V8 provides a syntax-only
-  // grammar check; Script construction NEVER evaluates the input. Only the admitted,
-  // erasable TS subset is transpiled here, solely for this grammar check.
   const javascript = file.endsWith('.ts') ? ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText : source;

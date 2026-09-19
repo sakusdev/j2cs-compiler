@@ -3,15 +3,16 @@
 The compiler handles a closed, single-file primitive Node module. It is not a
 complete JavaScript engine, TypeScript type checker, Node implementation, or
 Electron application converter. The rule DB's 2,681 entries are knowledge-base
-coverage; **29 reviewed adapters** currently have executable lowering. These are
+coverage; **38 reviewed adapters** currently have executable lowering. These are
 different measures.
 
 ## Explicitly unsupported
 
-- `var`, loops, `switch`, destructuring, spread, template literals, optional chains,
-  logical/bitwise/compound operators, `++`/`--`, unary `+`, exponentiation and loose
-  equality. Number arithmetic and relational comparisons are supported; general
-  String-to-Number coercion and String ordering are not.
+- `var`, `switch`, destructuring, spread, template literals, optional chains,
+  logical/bitwise operators, unary `+`, exponentiation and loose equality. `for-in`,
+  `for-of`, labels, and labeled `break` / `continue` remain unsupported. Primitive
+  `+=` is supported; other compound arithmetic and `++` / `--` require a proven Number
+  operand, so String-to-Number and other deferred coercions fail closed.
 - Objects, arrays, property/index access except direct `console.log`, classes,
   prototypes, getters, setters, Proxies, Symbols, BigInt and object identity tests.
 - Captured outer lexical bindings, nested/block functions, recursion, arrow/function
@@ -43,7 +44,10 @@ No whole-program facts are imported from TypeScript declarations or assertions.
 Uncalled functions are checked for syntax and binding validity but are not
 lowered. After an unconditional return, syntax/binding checks still occur and
 unreachable code is omitted. Branch analysis is conservative and does not use
-constant conditions or predicate narrowing to expand acceptance.
+constant conditions or predicate narrowing to expand acceptance. Loop analysis computes
+a finite type fixed point across normal and `continue` back-edges, and joins condition-false
+and `break` exits. Classic `for (let/const ...)` has a dedicated lexical scope; because
+closures/captures are still rejected, per-iteration binding identity cannot escape yet.
 
 Binary64 operations preserve doubles, NaN, infinities and signed zeros. Number
 printing uses .NET 8 shortest round-trip digits and ECMAScript notation thresholds,

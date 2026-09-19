@@ -63,6 +63,7 @@ const knownFlags: Record<string, Predicate> = {
   operand_may_be_non_boolean: { not: typeIs('operand', 'Boolean') },
   expression_may_be_non_boolean: { not: typeIs('operand', 'Boolean') },
   lhs_is_assignable_reference: eq('reference.kind', 'mutable-lexical'),
+  operand_is_assignable_reference: eq('reference.kind', 'mutable-lexical'),
   target_statically_known: eq('binding.kind', 'function'),
   exact_arity: { equalFacts: ['call.argumentCount', 'function.parameterCount'] },
   this_unused: absentObservation('this'), arguments_unused: absentObservation('arguments'),

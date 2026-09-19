@@ -56,8 +56,12 @@ alone can never select a builtin lowering.
 The value lattice is a finite subset of `{Number, String, Boolean, Null,
 Undefined}`. Initializers, assignments, operators and calls produce type sets.
 Sequential analysis preserves expression evaluation order. An `if` joins the
-reachable successor environments, excluding branches that returned. This is
-conservative: constant conditions and condition-based narrowing are not used.
+reachable successor environments, excluding branches that returned. `while`,
+`do...while`, and classic `for` compute a finite fixed point over normal and `continue`
+back-edges, while `break` exits are joined separately. This is conservative: constant
+conditions and condition-based narrowing are not used. Classic `for` lexical declarations
+have a loop-local scope; escaping per-iteration identity remains unobservable because
+closures and captures are rejected by the current profile.
 
 Ordinary top-level functions are specialized by their resolved binding and the
 tuple of actual argument type sets. This permits `add(1,2)` and `add('a','b')`
@@ -77,7 +81,7 @@ type checker and does not report all TypeScript type errors.
 
 `source.pattern` remains descriptive data. The compiler never parses it as a
 regex and never interpolates `target.template`. `compiler/rules/adapters.json`
-contains 29 reviewed mappings from **existing rule IDs** to normalized AST
+contains 38 reviewed mappings from **existing rule IDs** to normalized AST
 selectors and implemented lowering opcodes. Each adapter pins the full rule
 file's SHA-256 after CRLF-to-LF normalization for cross-platform Git checkouts.
 A missing/changed reviewed rule is an error, not an opportunity
@@ -136,7 +140,11 @@ String concatenation/equality uses UTF-16 values with ordinal comparison.
 The IR tracks `value`, `number`, `string` and `boolean` representations explicitly.
 C# evaluation order matches the admitted operations; helper calls receive
 already-evaluated operands left-to-right. Mutable lexical references use
-`JsReference.Assign(ref slot, value)` and return the assigned value.
+`JsReference.Assign(ref slot, value)` and return the assigned value. Canonical compound
+assignment/update helpers receive the reference plus its already-read value; C# argument
+evaluation captures that GetValue before the RHS, preserving JavaScript compound order.
+Number-only backend guards keep `-= *= /= %= ++ --` fail-closed when numeric coercion is
+not proven, while primitive `+=` reuses `JsOperators.Add`.
 
 Canonical runtime/helper responsibilities remain separate from the compiler:
 

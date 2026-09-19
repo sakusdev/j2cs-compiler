@@ -34,9 +34,15 @@ export function expressionFacts(e: SemanticExpr): Facts {
     f.type('left', e.left.types, 'Left operand analysis before evaluation of right operand')
       .type('right', e.right.types, 'Right operand analysis');
   }
+  if (e.kind === 'compound') {
+    f.type('left', e.leftTypes, 'Compound assignment GetValue before RHS evaluation')
+      .type('right', e.value.types, 'Compound assignment RHS analysis');
+  }
   if (e.kind === 'unary') f.type('operand', e.operand.types, 'Unary operand analysis');
-  if (e.kind === 'read' || e.kind === 'call' || e.kind === 'assign') bindingFacts(f, e.binding);
-  if (e.kind === 'assign') f.prove('reference.kind', 'mutable-lexical', 'Resolved writable initialized local/parameter');
+  if (e.kind === 'update') f.type('operand', e.operandTypes, 'Update operand GetValue analysis');
+  if (e.kind === 'read' || e.kind === 'call' || e.kind === 'assign' || e.kind === 'compound' || e.kind === 'update') bindingFacts(f, e.binding);
+  if (e.kind === 'assign' || e.kind === 'compound' || e.kind === 'update')
+    f.prove('reference.kind', 'mutable-lexical', 'Resolved writable initialized local/parameter');
   if (e.kind === 'call') {
     if (e.target === 'console') f.prove('member.integrity', 'pristine', 'Only direct resolved console.log calls, no mutations/escape');
     else { functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')

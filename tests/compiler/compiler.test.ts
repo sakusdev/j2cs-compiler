@@ -32,14 +32,34 @@ test('shadowed intrinsic names stay lexical', () => {
   const r = compile('const NaN = 42; console.log(NaN);', index);
   assert.ok(!r.trace.some(t => t.ruleId === 'values.nan.intrinsic-binding'));
 });
+test('parser normalizes classic loops and mutation operators', () => {
+  const ast = parse('for (let i=0; i<2; i++) { while (false) { break; } }');
+  assert.equal(ast.body[0]?.kind, 'for');
+  assert.equal(ast.body[0]?.kind === 'for' && ast.body[0].update?.kind, 'update');
+});
+test('canonical mutation adapters are selected only with proof', () => {
+  const r = compile('let x=1; x += 2; x++; --x;', index);
+  assert.ok(r.trace.some(t => t.ruleId === 'operators.addition-assignment'));
+  assert.ok(r.trace.some(t => t.ruleId === 'operators.postfix-increment'));
+  assert.ok(r.trace.some(t => t.ruleId === 'operators.prefix-decrement'));
+});
+test('loop fixed point widens mutated bindings before lowering following expressions', () => {
+  const r = compile("let v=1; let i=0; while(i<1){v='x'; i++;} console.log(v+1);", index);
+  assert.ok(r.trace.some(t => t.ruleId === 'operators.addition.dynamic'));
+});
 const diagnostics: [string, string, string][] = [
   ['parse error', 'const = ;', 'E_PARSE'],
   ['var', 'var x = 1;', 'E_UNSUPPORTED_SYNTAX'],
-  ['loop', 'while (true) {}', 'E_UNSUPPORTED_SYNTAX'],
   ['array', 'const x = [];', 'E_UNSUPPORTED_SYNTAX'],
   ['object', 'const x = {};', 'E_UNSUPPORTED_SYNTAX'],
   ['bigint', 'const x = 1n;', 'E_UNSUPPORTED_SYNTAX'],
   ['loose equality', 'console.log(1 == true);', 'E_UNSUPPORTED_SYNTAX'],
+  ['for-in', 'for (const k in value) {}', 'E_UNSUPPORTED_SYNTAX'],
+  ['for-of', 'for (const x of [1]) {}', 'E_UNSUPPORTED_SYNTAX'],
+  ['const update', 'const x=1; x++;', 'E_IMMUTABLE_WRITE'],
+  ['unsafe string update', "let x='1'; x++;", 'E_NO_SAFE_RULE'],
+  ['unsafe numeric compound coercion', "let x=5; x -= '2';", 'E_NO_SAFE_RULE'],
+  ['for lexical scope', 'for (let i=0;i<1;i++) {} console.log(i);', 'E_UNRESOLVED_BINDING'],
   ['optional chain', 'console?.log(1);', 'E_UNSUPPORTED_SYNTAX'],
   ['const without initializer', 'const x;', 'E_CONST_INIT'],
   ['const write', 'const x = 1; x = 2;', 'E_IMMUTABLE_WRITE'],

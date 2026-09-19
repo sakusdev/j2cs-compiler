@@ -54,6 +54,8 @@ structured diagnostics including source location and failed rule proofs.
 | Arithmetic | Number `+ - * / %`, unary `-`; primitive String concatenation and coercing primitive `+` |
 | Comparisons | Number `< <= > >=`; primitive `===` / `!==` |
 | Statements | Expression statements, blocks, `if` / `else`, `return`, empty statements |
+| Loops | `while`, `do...while`, classic `for`, unlabeled `break` / `continue`; fixed-point flow joins |
+| Mutation | local `=`, primitive `+=`; Number-proven `-= *= /= %=`, prefix/postfix `++` / `--` |
 | Conditions | JavaScript primitive truthiness and `!` |
 | Functions | Top-level ordinary declarations; known direct calls, exact arity, primitive parameters/results, hoisting, bare/fallthrough return |
 | TypeScript | Erasable scalar variable/parameter/return annotations; annotations are **not** trusted as runtime facts |
@@ -78,8 +80,8 @@ npm run coverage:gaps
 Differential tests compile each fixture, run `dotnet build`, execute Node and the
 produced assembly, and compare stdout, stderr, exit status and explicit observable
 expression probes. They cover signed zero, NaN, infinities, string encodings,
-truthiness, scope/shadowing, flow joins, evaluation order, function specialization,
-and binary64 number formatting. Missing .NET is a test failure, never a silent skip.
+truthiness, scope/shadowing, branch/loop fixed-point joins, abrupt loop control, mutation evaluation order,
+function specialization, and binary64 number formatting. Missing .NET is a test failure, never a silent skip.
 Set `DOTNET` to an SDK executable path if `dotnet` is not on PATH.
 
 CI runs compiler/differential tests on Linux and Windows, plus the original rule

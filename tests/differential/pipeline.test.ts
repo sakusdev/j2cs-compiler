@@ -75,6 +75,59 @@ const fixtures: Fixture[] = [
     function twice(v: number): number { return v * 2; } console.log(twice(y));
     const misleading: number = 'string'; console.log(misleading + 1);
   ` },
+  { name: 'loops-control-flow', source: `
+    let untouched = 0;
+    while (false) { untouched = 1; }
+    console.log(untouched);
+
+    let i = 0; let total = 0;
+    while (i < 6) {
+      i++;
+      if (i === 2) continue;
+      if (i === 5) break;
+      total += i;
+    }
+    console.log(i, total);
+
+    let d = 0;
+    do { d++; } while (d < 2);
+    console.log(d);
+
+    let outer = 7;
+    for (let outer = 0; outer < 2; outer++) { console.log(outer); }
+    console.log(outer);
+
+    let nested = 0;
+    for (let a = 0; a < 3; a++) {
+      for (let b = 0; b < 3; b++) {
+        if (b === 1) continue;
+        if (a === 2) break;
+        nested += a * 10 + b;
+      }
+    }
+    console.log(nested);
+  ` },
+  { name: 'mutation-order-and-number-edges', source: `
+    let x = 1;
+    console.log(x += (x = 5), x);
+    let y = 5;
+    console.log(y -= 2, y); console.log(y *= 3, y); console.log(y /= 2, y); console.log(y %= 4, y);
+
+    let p = 1;
+    console.log(p++, p, ++p, p--, p, --p);
+
+    let z = -0;
+    console.log(z++, z);
+
+    let q = NaN; let count = 0;
+    while (count < 1) { q += 0; count++; }
+    console.log(q);
+
+    let s = 'a'; s += 1; console.log(s);
+    let v = 1; let once = 0;
+    while (once < 1) { v = 'x'; once++; }
+    console.log(v + 1);
+  ` },
   { name: 'observable-results', source: 'function calculate(a,b) { return a / b; } const result = calculate(7, 2);',
     observe: ['result', 'result === 3.5', '1 / -0', 'null === undefined', "'a' + 1"] },
 ];
