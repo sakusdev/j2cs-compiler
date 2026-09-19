@@ -22,6 +22,7 @@ const arrayPrototypeKeys = new Set(['at', 'concat', 'copyWithin', 'entries', 'ev
 
 export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   const instances: SemanticFunction[] = [], cache = new Map<string, SemanticFunction>(), active = new Set<number>();
+  const argumentFrames = new Map<number, ValueInfo[]>();
   let nextInstance = 0;
   const syntheticUndefined = (n: Node): SE => ({ ...n, kind: 'literal', value: undefined, types: ['Undefined'] });
   const valueOf = (e: SE): ValueInfo => ({ types: e.types, ...(e.refs ? { refs: e.refs } : {}) });
@@ -142,28 +143,94 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
     }
   }
-  function instantiate(b: Binding, args: SE[], callNode: Node): SemanticFunction {
+  function instantiate(b: Binding, supplied: ValueInfo[], callNode: Node): SemanticFunction {
     const fn = b.function!;
-    if (args.length !== fn.params.length) fail('E_ARITY', 'Only exact-arity direct function calls are supported.', callNode.span);
-    if (args.some(a => hasReference(a.types)))
+    if (supplied.some(a => hasReference(a.types)))
       fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object/Array arguments require alias/effect summaries and are deferred.', callNode.span);
     if (active.has(b.id)) fail('E_RECURSION', 'Recursive call graphs require a summary fixed point; unsupported in this MVP.', callNode.span);
-    const key = `${b.id}:${args.map(a => a.types.join('|')).join(',')}`;
+    const key = `${b.id}:${supplied.length}:${supplied.map(a => a.types.join('|')).join(',')}`;
     const found = cache.get(key); if (found) return found;
     active.add(b.id);
-    const instanceId = nextInstance++, params = fn.params.map(p => bindings.declarations.get(p.id)!);
-    const f: Flow = { env: new Map(params.map((p, i) => [p.id, valueOf(args[i]!)])), heap: new Map(), reachable: true, returns: [], loopDepth: 0 };
-    const body = statements(fn.body.body, f);
-    if (f.reachable) {
-      const value = syntheticUndefined(fn.body);
-      body.push({ ...fn.body, kind: 'return', value }); f.returns.push(value.types);
+    const instanceId = nextInstance++;
+    const argumentsBinding = bindings.functionArguments.get(fn.id)!;
+    const paramBindings = fn.params.map(p => bindings.declarations.get(p.id)!);
+    const simpleParameters = fn.params.every(p => !p.initializer && !p.rest);
+    const f: Flow = { env: new Map(), heap: new Map(), reachable: true, returns: [], loopDepth: 0 };
+    const params: SemanticFunction['params'] = [];
+    argumentFrames.set(argumentsBinding.id, supplied.map(cloneValue));
+    try {
+      for (let i = 0; i < fn.params.length; i++) {
+        const source = fn.params[i]!, binding = paramBindings[i]!;
+        if (source.rest) {
+          const remaining = supplied.slice(i), refId = source.id;
+          const shape: Shape = { kind: 'Array', length: remaining.length, properties: new Map() };
+          remaining.forEach((value, j) => shape.properties.set(String(j), cloneValue(value)));
+          f.heap.set(refId, shape);
+          f.env.set(binding.id, { types: ['Array'], refs: [refId] });
+          params.push({ binding, index: i, rest: true, initialization: 'rest' });
+          continue;
+        }
+        const raw = supplied[i] ?? UNDEFINED;
+        if (source.initializer && raw.types.includes('Undefined')) {
+          const initializer = expression(source.initializer, f);
+          const retained = raw.types.filter(t => t !== 'Undefined') as TypeSet;
+          const value = retained.length ? unionValue({ types: retained }, valueOf(initializer)) : valueOf(initializer);
+          f.env.set(binding.id, value);
+          params.push({ binding, index: i, rest: false,
+            initialization: retained.length ? 'default-conditional' : 'default-always', initializer });
+        } else {
+          f.env.set(binding.id, cloneValue(raw));
+          params.push({ binding, index: i, rest: false, initialization: 'argument' });
+        }
+      }
+      const body = statements(fn.body.body, f);
+      if (f.reachable) {
+        const value = syntheticUndefined(fn.body);
+        body.push({ ...fn.body, kind: 'return', value }); f.returns.push(value.types);
+      }
+      const instance: SemanticFunction = { ...fn, instanceId, binding: b, argumentsBinding, params, body,
+        returnTypes: union(...f.returns), simpleParameters, observesArguments: !!argumentsBinding.observed };
+      instances.push(instance); cache.set(key, instance); return instance;
+    } finally {
+      argumentFrames.delete(argumentsBinding.id); active.delete(b.id);
     }
-    const instance: SemanticFunction = { ...fn, instanceId, binding: b, params, body, returnTypes: union(...f.returns) };
-    instances.push(instance); cache.set(key, instance); active.delete(b.id); return instance;
+  }
+
+  function callArguments(args: Expr[], f: Flow): { args: SE[]; supplied: ValueInfo[]; hasSpread: boolean } {
+    const semantic: SE[] = [], supplied: ValueInfo[] = [];
+    let hasSpread = false;
+    for (const arg of args) {
+      if (arg.kind !== 'spread') {
+        const value = expression(arg, f); semantic.push(value); supplied.push(valueOf(value)); continue;
+      }
+      hasSpread = true;
+      const operand = expression(arg.operand, f);
+      semantic.push({ ...arg, kind: 'spread', operand, types: operand.types, ...(operand.refs ? { refs: operand.refs } : {}) });
+      if (exactly(operand.types, 'Array') && operand.refs?.length) {
+        const shapes = operand.refs.map(ref => f.heap.get(ref));
+        if (shapes.some(shape => !shape || shape.kind !== 'Array' || shape.length === undefined))
+          fail('E_SPREAD_LENGTH', 'Call spread currently requires a compiler-owned Array with proven length.', arg.span);
+        const lengths = shapes.map(shape => shape!.length!);
+        if (!lengths.every(length => length === lengths[0]))
+          fail('E_SPREAD_LENGTH', 'Call spread Array length must be stable across all flow paths.', arg.span);
+        for (let i = 0; i < lengths[0]!; i++)
+          supplied.push(unionValue(...shapes.map(shape => shape!.properties.get(String(i)) ?? UNDEFINED)));
+        continue;
+      }
+      if (operand.kind === 'literal' && typeof operand.value === 'string') {
+        for (const _ of [...operand.value]) supplied.push({ types: ['String'] });
+        continue;
+      }
+      fail('E_SPREAD_ITERABLE',
+        'Call spread is currently bounded to compiler-owned Arrays with proven length and literal Strings; unknown/custom iterables fail closed.',
+        arg.span);
+    }
+    return { args: semantic, supplied, hasSpread };
   }
 
   function expression(n: Expr, f: Flow): SE {
     switch (n.kind) {
+      case 'spread': return fail('E_SPREAD_CONTEXT', 'Spread elements are only valid in direct call argument lists in this profile.', n.span);
       case 'literal': return { ...n, types: literalType(n.value) };
       case 'object': {
         if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
@@ -200,6 +267,11 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
       case 'unary': return { ...n, operand: expression(n.operand, f), types: [n.op === '!' ? 'Boolean' : 'Number'] };
       case 'assign': {
+        if (n.target.kind === 'member' && n.target.object.kind === 'identifier') {
+          const targetBinding = bindings.references.get(n.target.object.id);
+          if (targetBinding?.kind === 'arguments')
+            fail('E_ARGUMENTS_MUTATION', 'Mutation of the arguments object is deferred; supported observations are read-only.', n.span);
+        }
         if (n.target.kind === 'identifier') {
           const binding = bindings.references.get(n.target.id)!;
           readType(binding, n.target, f);
@@ -224,6 +296,23 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         return { ...n, binding, operandTypes: operand.types, types };
       }
       case 'member': {
+        if (n.object.kind === 'identifier') {
+          const binding = bindings.references.get(n.object.id);
+          if (binding?.kind === 'arguments') {
+            const values = argumentFrames.get(binding.id);
+            if (!values) fail('E_ARGUMENTS_CONTEXT', 'arguments is only available while analyzing its owning function.', n.span);
+            if (n.property === 'length') return { ...n, kind: 'argumentsLength', binding, types: ['Number'] };
+            if (!/^(?:0|[1-9]\d*)$/.test(n.property))
+              fail('E_ARGUMENTS_PROPERTY', 'Only arguments.length and static non-negative integer index reads are supported.', n.span);
+            const fn = binding.function!, simple = fn.params.every(p => !p.initializer && !p.rest);
+            if (simple)
+              fail('E_ARGUMENTS_MAPPED_INDEX',
+                'Indexed mapped-arguments aliasing for simple non-strict parameter lists is deferred; use arguments.length or a non-simple parameter list.',
+                n.span);
+            const index = Number(n.property), value = values[index] ?? UNDEFINED;
+            return withValue({ ...n, kind: 'argumentsIndex' as const, binding, index }, cloneValue(value));
+          }
+        }
         const object = expression(n.object, f);
         const refs = requireReference(object, f, 'Property read');
         if (n.property === 'length' && refs.every(r => f.heap.get(r)!.kind === 'Array'))
@@ -237,6 +326,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
             if (n.callee.object.name === 'console' && (binding?.kind !== 'intrinsic' || binding.name !== 'console'))
               fail('E_INTRINSIC_SHADOWED', 'console.log does not resolve to the pristine Node console intrinsic.', n.span);
             if (binding?.kind === 'intrinsic' && binding.name === 'console' && n.callee.property === 'log') {
+              if (n.args.some(a => a.kind === 'spread')) fail('E_SPREAD_CALL_TARGET', 'Spread is currently supported only on statically resolved user functions.', n.span);
               const args = n.args.map(a => expression(a, f));
               if (args.some(a => hasReference(a.types)))
                 fail('E_CONSOLE_OBJECT', 'Object/Array console inspection is outside the primitive console host contract.', n.span);
@@ -248,6 +338,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
               return { ...n, kind: 'call', target: 'console', binding, args, arity: args.length, types: ['Undefined'] };
             }
             if (binding?.kind === 'intrinsic' && binding.name === 'Object' && n.callee.property === 'hasOwn') {
+              if (n.args.some(a => a.kind === 'spread')) fail('E_SPREAD_CALL_TARGET', 'Spread is currently supported only on statically resolved user functions.', n.span);
               if (n.args.length !== 2) fail('E_ARITY', 'Object.hasOwn is supported only with exactly two arguments.', n.span);
               const receiver = expression(n.args[0]!, f); requireReference(receiver, f, 'Object.hasOwn');
               const key = n.args[1]!;
@@ -258,6 +349,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
             }
           }
           if (n.callee.property === 'push') {
+            if (n.args.some(a => a.kind === 'spread')) fail('E_SPREAD_CALL_TARGET', 'Spread into Array.prototype.push is deferred.', n.span);
             const receiver = expression(n.callee.object, f), refs = requireReference(receiver, f, 'Array.prototype.push');
             if (!exactly(receiver.types, 'Array') || refs.some(r => f.heap.get(r)!.kind !== 'Array'))
               fail('E_ARRAY_RECEIVER', 'push requires a proven builtin Array receiver.', n.span);
@@ -282,6 +374,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
           if (!['isFinite', 'isNaN', 'parseFloat', 'parseInt'].includes(binding.name))
             fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
           const target = binding.name as 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt';
+          if (n.args.some(a => a.kind === 'spread')) fail('E_SPREAD_CALL_TARGET', 'Spread into this intrinsic is deferred.', n.span);
           const args = n.args.map(a => expression(a, f));
           const validArity = target === 'parseInt' ? args.length === 1 || args.length === 2 : args.length === 1;
           if (!validArity) fail('E_ARITY', `Intrinsic ${target} is currently supported only at its reviewed arity.`, n.span);
@@ -289,8 +382,15 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
             types: target === 'isFinite' || target === 'isNaN' ? ['Boolean'] : ['Number'] };
         }
         if (binding.kind !== 'function') fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
-        const args = n.args.map(a => expression(a, f)), instance = instantiate(binding, args, n);
-        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length, types: instance.returnTypes };
+        const packed = callArguments(n.args, f), instance = instantiate(binding, packed.supplied, n);
+        const formalCount = binding.function!.params.length;
+        const callKind = packed.hasSpread ? 'spread'
+          : packed.supplied.length < formalCount ? 'missing'
+          : packed.supplied.length > formalCount ? 'extra'
+          : instance.simpleParameters && !instance.observesArguments ? 'exact' : 'nonSimpleExact';
+        return { ...n, kind: 'call', binding, target: instance.instanceId, args: packed.args, arity: formalCount,
+          suppliedCount: packed.supplied.length, callKind, functionSimple: instance.simpleParameters,
+          observesArguments: instance.observesArguments, types: instance.returnTypes };
       }
     }
   }
