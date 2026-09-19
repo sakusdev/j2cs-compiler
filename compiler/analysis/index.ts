@@ -549,5 +549,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     }
   }
 
-  return { body: statements(program.body, { env: new Map(), heap: new Map(), reachable: true, returns: [], loopDepth: 0 }), functions: instances };
+  const body = statements(program.body, { env: new Map(), heap: new Map(), reachable: true, returns: [], loopDepth: 0 });
+  for (const instance of instances) instance.usedWithNew = constructedBindings.has(instance.binding.id);
+  return { body, functions: instances };
 }
