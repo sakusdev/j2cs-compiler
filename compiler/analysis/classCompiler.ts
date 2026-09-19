@@ -111,6 +111,7 @@ export function compileClassProgram(program: ParsedClassProgram, index: RuleInde
       line(0, '');
       line(1, `private static JsValue ${method}()`);
       line(1, '{');
+      if (!element.result) fail('E_CLASS_DEPENDENCY', 'Dynamic static method body was not proven for lowering.', element.span);
       line(2, `return ${emitExpr(element.result)};`);
       line(1, '}');
     }
