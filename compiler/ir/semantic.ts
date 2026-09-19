@@ -2,6 +2,9 @@ import type { Binding } from '../analysis/bindings.js';
 import type { TypeSet } from '../analysis/facts.js';
 import type { Node, LiteralValue } from '../parser/ast.js';
 export type RefSet = readonly number[];
+export type BuiltinMethodTarget =
+  | 'array.push' | 'array.at' | 'array.includes' | 'array.indexOf' | 'array.pop'
+  | 'string.at' | 'string.charAt' | 'string.includes' | 'string.indexOf' | 'string.slice' | 'string.substring';
 interface Typed { types: TypeSet; refs?: RefSet }
 export type SemanticExpr = Node & Typed & (
   | { kind: 'literal'; value: LiteralValue | undefined }
@@ -16,7 +19,7 @@ export type SemanticExpr = Node & Typed & (
   | { kind: 'object'; properties: { key: string; value: SemanticExpr }[] }
   | { kind: 'array'; elements: (SemanticExpr | null)[] }
   | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt' | number; args: SemanticExpr[]; binding: Binding; arity: number }
-  | { kind: 'call'; target: 'array.push'; receiver: SemanticExpr; args: SemanticExpr[]; arity: number }
+  | { kind: 'call'; target: BuiltinMethodTarget; receiver: SemanticExpr; args: SemanticExpr[]; arity: number }
   | { kind: 'call'; target: 'object.hasOwn'; receiver: SemanticExpr; property: string; binding: Binding; args: []; arity: 2 }
 );
 export type SemanticForInitializer = Node & (
