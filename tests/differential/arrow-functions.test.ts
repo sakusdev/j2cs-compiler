@@ -57,8 +57,10 @@ internal static class Program
     <AssemblyName>J2cs.ArrowContract</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Program.cs" />
     <ProjectReference Include="runtime/J2cs.Runtime/J2cs.Runtime.csproj" />
   </ItemGroup>
 </Project>
