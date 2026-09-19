@@ -193,6 +193,7 @@ public sealed class NodeWritable
     private readonly NodeEventEmitter events;
     private readonly INodeCompatScheduler scheduler;
     private readonly NodeWriteHandler handler;
+    private readonly List<Action<Exception?>> endCallbacks = new();
     private bool processing;
     private bool ending;
     private bool finishScheduled;
@@ -241,8 +242,8 @@ public sealed class NodeWritable
     public NodeWritable End(NodeStreamChunk? finalChunk = null, Action<Exception?>? callback = null)
     {
         if (ending) return this;
-        if (finalChunk.HasValue) Write(finalChunk.Value, callback);
-        else if (callback is not null) Once("finish", new NodeEventListener(_ => callback(null)));
+        if (callback is not null) endCallbacks.Add(callback);
+        if (finalChunk.HasValue) Write(finalChunk.Value);
         ending = true;
         MaybeScheduleFinish();
         return this;
@@ -283,6 +284,8 @@ public sealed class NodeWritable
         if (error is not null)
         {
             failed = true;
+            foreach (var callback in endCallbacks) callback(error);
+            endCallbacks.Clear();
             events.Emit("error", JsValue.FromString(error.Message));
             return;
         }
@@ -305,6 +308,8 @@ public sealed class NodeWritable
         {
             finishScheduled = false;
             if (!ending || processing || queue.Count != 0 || finished || failed) return;
+            foreach (var callback in endCallbacks) callback(null);
+            endCallbacks.Clear();
             finished = true;
             events.Emit("finish");
         });
@@ -326,6 +331,8 @@ public sealed class NodeDuplex
         Readable = new NodeReadable(scheduler, readableHighWaterMark, readableObjectMode, events);
         Writable = new NodeWritable(scheduler, writableHighWaterMark, writableObjectMode, writeHandler, events);
         AllowHalfOpen = allowHalfOpen;
+        if (!allowHalfOpen)
+            Readable.Once("end", new NodeEventListener(_ => Writable.End()));
     }
 
     public NodeReadable Readable { get; }
