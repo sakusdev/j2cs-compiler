@@ -65,7 +65,8 @@ test('issue #30 builtin proof adapters pin canonical j2cs rules and require comp
     receiver_inferred_as: 'ECMAScript RegExp or runtime RegExp value',
     builtin_semantics_required: true,
     'regexp.execOverridden': false,
-    'regexp.patternSubset': 'literal-utf16',
+    'regexp.patternSubset': 'nonempty-literal-utf16-no-meta',
+    'regexp.input.domain': 'primitive',
   });
   assert.equal(regexp.verdict, 'proven');
 

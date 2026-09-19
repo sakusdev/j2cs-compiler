@@ -106,14 +106,14 @@ export const dateRegExpJsonErrorAdapters: readonly BuiltinRuleAdapter[] = [
     ruleId: 'regexp.literal.create',
     sha256: '5f6f2aaf1f8b058254b03d2820592d6c242074250f8532f9d53ab9f2aee57c92',
     lowering: 'JsRegExp.CreateLiteral',
-    guards: { 'regexp.patternSubset': 'literal-utf16', 'regexp.flagsSubset': 'g-or-empty' },
+    guards: { 'regexp.patternSubset': 'nonempty-literal-utf16-no-meta', 'regexp.flagsSubset': 'g-or-empty' },
   },
   {
     operation: 'regexp.test',
     ruleId: 'regexp.prototype.test',
     sha256: 'af301d0c1f152e71e6f0bf9f56d2c9dd30106569ce014f3d68a5bb41db9ffa8c',
     lowering: 'JsRegExp.Test',
-    guards: { 'regexp.execOverridden': false, 'regexp.patternSubset': 'literal-utf16' },
+    guards: { 'regexp.execOverridden': false, 'regexp.patternSubset': 'nonempty-literal-utf16-no-meta', 'regexp.input.domain': 'primitive' },
   },
   {
     operation: 'error.call.empty',
