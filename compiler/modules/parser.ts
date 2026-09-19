@@ -84,13 +84,16 @@ export function normalizeModule(source: string, file = 'input.mjs'): ModuleIr {
 
   const requests: ModuleRequest[] = [], imports: ModuleImport[] = [], sideEffectImports: SideEffectImport[] = [];
   const localExports: LocalExport[] = [], indirectExports: IndirectExport[] = [], starExports: StarExport[] = [];
-  const declaredBindings: string[] = [];
+  const declaredBindings: string[] = [], uninitializedBindings: string[] = [];
   let defaultExport: DefaultExport | undefined, order = 0, anonymousDefault = 0;
 
   const request = (specifier: string, n: ts.Node): void => {
     requests.push({ specifier, span: span(sf, n), order: order++ });
   };
-  const declare = (name: string): void => { if (!declaredBindings.includes(name)) declaredBindings.push(name); };
+  const declare = (name: string, uninitialized = false): void => {
+    if (!declaredBindings.includes(name)) declaredBindings.push(name);
+    if (uninitialized && !uninitializedBindings.includes(name)) uninitializedBindings.push(name);
+  };
   const setDefault = (entry: DefaultExport): void => {
     if (defaultExport) fail('E_MODULE_DUP_EXPORT', 'A module may have only one default export.', entry.span);
     defaultExport = entry;
@@ -154,7 +157,7 @@ export function normalizeModule(source: string, file = 'input.mjs'): ModuleIr {
     if (ts.isExportAssignment(s)) {
       if (s.isExportEquals) failModule(sf, s, 'export = is CommonJS/TypeScript interop and is not ESM default export syntax.');
       const localName = `*default:${anonymousDefault++}*`;
-      declare(localName);
+      declare(localName, true);
       setDefault({ form: 'expression', localName, span: span(sf, s) });
       continue;
     }
@@ -165,8 +168,9 @@ export function normalizeModule(source: string, file = 'input.mjs'): ModuleIr {
 
     if (ts.isVariableStatement(s)) {
       const names = declarationNames(sf, s);
+      const lexical = (s.declarationList.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0;
       for (const name of names) {
-        declare(name);
+        declare(name, lexical);
         if (exported) localExports.push({ exportName: name, localName: name, span: span(sf, s) });
       }
       if (isDefault) failModule(sf, s, 'Variable statements cannot be default exports.');
@@ -174,11 +178,11 @@ export function normalizeModule(source: string, file = 'input.mjs'): ModuleIr {
     }
 
     if (ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s)) {
-      const name = s.name?.text;
-      if (name) declare(name);
+      const name = s.name?.text, lexical = ts.isClassDeclaration(s);
+      if (name) declare(name, lexical);
       if (exported && isDefault) {
         const localName = name ?? `*default:${anonymousDefault++}*`;
-        declare(localName);
+        declare(localName, lexical);
         setDefault({ form: 'function_or_class_declaration', localName, span: span(sf, s) });
       } else if (exported) {
         if (!name) failModule(sf, s, 'A non-default exported declaration requires a local name.');
@@ -190,6 +194,6 @@ export function normalizeModule(source: string, file = 'input.mjs'): ModuleIr {
 
   return {
     file, requests, imports, sideEffectImports, localExports, indirectExports, starExports,
-    declaredBindings, defaultExport, topLevelThis: hasTopLevelThis(sf),
+    declaredBindings, uninitializedBindings, defaultExport, topLevelThis: hasTopLevelThis(sf),
   };
 }

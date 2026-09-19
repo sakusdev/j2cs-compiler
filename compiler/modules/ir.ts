@@ -51,6 +51,7 @@ export interface ModuleIr {
   indirectExports: IndirectExport[];
   starExports: StarExport[];
   declaredBindings: string[];
+  uninitializedBindings: string[];
   defaultExport?: DefaultExport;
   topLevelThis: boolean;
 }

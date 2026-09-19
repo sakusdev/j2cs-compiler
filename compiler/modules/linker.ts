@@ -1,4 +1,3 @@
-import { fail } from '../diagnostics/index.js';
 import type { RuleDatabase } from '../rules/loader.js';
 import type { ModuleIr } from './ir.js';
 import {
@@ -88,12 +87,6 @@ export function linkModuleGraph(
     for (const side of module.sideEffectImports) prove(
       module.file, `side-effect import ${side.specifier}`, 'modules.esm.side-effect-import', { import_clause_absent: true },
     );
-    for (const local of module.localExports) {
-      if (module.defaultExport && local.exportName === 'default') continue;
-      prove(module.file, `local export ${local.exportName}`,
-        local.exportName === local.localName ? 'modules.esm.local-export-live-binding' : 'modules.esm.export-alias-live-binding',
-        { local_binding_resolved: true });
-    }
     if (module.defaultExport) prove(module.file, 'default export',
       module.defaultExport.form === 'expression' ? 'modules.esm.default-export-expression' : 'modules.esm.default-export-declaration',
       { form: module.defaultExport.form });
@@ -220,6 +213,11 @@ export function linkModuleGraph(
       if (resolution.kind === 'missing') throw new ModuleLinkError(
         'E_MODULE_LOCAL_EXPORT', `Export '${local.exportName}' refers to unknown local binding '${local.localName}' in ${module.file}.`,
       );
+      if (!(module.defaultExport && local.exportName === 'default')) prove(
+        module.file, `local export ${local.exportName}`,
+        local.exportName === local.localName ? 'modules.esm.local-export-live-binding' : 'modules.esm.export-alias-live-binding',
+        { local_binding_resolved: true },
+      );
     }
     for (const item of module.indirectExports) {
       if (item.importName === '*namespace*') continue;
@@ -246,8 +244,15 @@ export function linkModuleGraph(
     stack.pop(); color.set(id, 2);
   };
   for (const id of records.keys()) if ((color.get(id) ?? 0) === 0) cycleDfs(id);
-  for (const cycle of cycles) prove(cycle[0]!, 'cycle TDZ boundary', 'modules.esm.cycle-tdz',
-    { module_graph_contains_cycle: true, target_binding_may_be_uninitialized: true });
+  for (const cycle of cycles) {
+    const members = new Set(cycle);
+    const mayReadUninitialized = cycle.some(id => [...(importBindings.get(id)?.values() ?? [])].some(resolution =>
+      resolution.kind === 'binding'
+      && members.has(resolution.target.module)
+      && records.get(resolution.target.module)!.uninitializedBindings.includes(resolution.target.binding)));
+    if (mayReadUninitialized) prove(cycle[0]!, 'cycle TDZ boundary', 'modules.esm.cycle-tdz',
+      { module_graph_contains_cycle: true, target_binding_may_be_uninitialized: true });
+  }
 
   const evaluationOrder: string[] = [], evalState = new Map<string, 0 | 1 | 2>();
   const evaluateDfs = (id: string): void => {
