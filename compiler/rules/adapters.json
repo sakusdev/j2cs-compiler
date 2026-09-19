@@ -734,6 +734,46 @@
           "equals": "primitive"
         }
       ]
+    },
+    {
+      "ruleId": "function.constructor.new-ordinary",
+      "sha256": "dd9481b8b6e5a8a00bc81e1f3cded740080ae968a011a78fccae614cb582791e",
+      "selector": {
+        "kind": "construct.function"
+      },
+      "lowering": "construct.function",
+      "requires": [
+        {
+          "fact": "construction.targetKnown",
+          "equals": true
+        },
+        {
+          "fact": "constructor.prototypeMutable",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "ruleId": "function.constructor.object-return-overrides-this",
+      "sha256": "75db0515b0a8d3d0255abcf1bc62a179ba536efdd2be1c7a27069f43d89488b9",
+      "selector": {
+        "kind": "construct.returnOverride"
+      },
+      "lowering": "construct.returnOverride",
+      "requires": [
+        {
+          "fact": "construction.targetKnown",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "ruleId": "function.new-target",
+      "sha256": "0d4d300b873b8964474d612ffaa4e6bf03f41e3a60d232cf9bd1818996161b10",
+      "selector": {
+        "kind": "meta.newTarget"
+      },
+      "lowering": "meta.newTarget"
     }
   ]
 }
