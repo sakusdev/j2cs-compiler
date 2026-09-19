@@ -80,9 +80,10 @@ public sealed class JsModuleRecord
         internal static Resolution Conflict => new(null, true);
     }
 
-    internal Resolution ResolveExport(string name, HashSet<ResolveKey>? resolveSet = null)
+    internal Resolution ResolveExport(string name) => ResolveExport(name, []);
+
+    private Resolution ResolveExport(string name, HashSet<ResolveKey> resolveSet)
     {
-        resolveSet ??= [];
         var key = new ResolveKey(this, name);
         if (!resolveSet.Add(key)) return Resolution.Missing;
 
