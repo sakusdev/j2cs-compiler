@@ -734,6 +734,62 @@
           "equals": "primitive"
         }
       ]
+    },
+    {
+      "ruleId": "function.call.missing-arguments",
+      "sha256": "d429ece204854f778d8ee304ea14f80b5080bfc4b19b8f026afa34bba3b9b530",
+      "selector": {
+        "kind": "call.function.missing"
+      },
+      "lowering": "call.arguments"
+    },
+    {
+      "ruleId": "function.call.extra-arguments",
+      "sha256": "63e162d81ec90d445711de6ce2c474035a8309bbf8e90780526a67bfad3ea1b3",
+      "selector": {
+        "kind": "call.function.extra"
+      },
+      "lowering": "call.arguments"
+    },
+    {
+      "ruleId": "function.parameters.default-undefined-only",
+      "sha256": "9e5275c591c28c8b374e3c13b6dd98eadaa840ad26fb73fa6248765830deb481",
+      "selector": {
+        "kind": "parameter.default"
+      },
+      "lowering": "parameter.default"
+    },
+    {
+      "ruleId": "function.parameters.rest-array",
+      "sha256": "468598b9efbe99f4f965283ff41bb00f51108691cb88f457992fba7b3214d95b",
+      "selector": {
+        "kind": "parameter.rest"
+      },
+      "lowering": "parameter.rest"
+    },
+    {
+      "ruleId": "function.arguments.length",
+      "sha256": "295d311e7a38b9967fea642e0204123c1df1672bee8d24ce8d2272791dcfc23f",
+      "selector": {
+        "kind": "arguments.length"
+      },
+      "lowering": "arguments.length"
+    },
+    {
+      "ruleId": "function.arguments.unmapped-index",
+      "sha256": "74d552a549d5b85a87f312604acdd5c5460d5de2156d42b8d0cdc5faabde1dde",
+      "selector": {
+        "kind": "arguments.index"
+      },
+      "lowering": "arguments.index"
+    },
+    {
+      "ruleId": "function.call.spread-iterable",
+      "sha256": "24296d2d0d9c360b3e8158630a94df93406fea303bec0a3e76b7bd24dcd36414",
+      "selector": {
+        "kind": "call.spread"
+      },
+      "lowering": "call.spread"
     }
   ]
 }
