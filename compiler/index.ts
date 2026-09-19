@@ -9,7 +9,12 @@ import { lower } from './lowering/index.js';
 import { emitCSharp } from './emit/csharp/index.js';
 export const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 export async function createCompiler(ruleDb = path.join(ROOT, 'rule-db')): Promise<RuleIndex> {
-  return new RuleIndex(await loadRules(ruleDb), await loadAdapters(path.join(ROOT, 'compiler/rules/adapters.json')));
+  const database = await loadRules(ruleDb);
+  const [core, asyncAdapters] = await Promise.all([
+    loadAdapters(path.join(ROOT, 'compiler/rules/adapters.json')),
+    loadAdapters(path.join(ROOT, 'compiler/rules/async-adapters.json')),
+  ]);
+  return new RuleIndex(database, [...core, ...asyncAdapters]);
 }
 export function compile(source: string, index: RuleIndex, file = 'input.js') {
   const ast = parse(source, file), bindings = resolveBindings(ast), semantics = analyze(ast, bindings);
