@@ -46,6 +46,8 @@ updater.MarkUpdateDownloaded("2.0.0");
 Console.WriteLine(updater.PersistDownloadedForNextLaunch().Kind);
 updater.RecordRollbackPoint("1.0.0");
 Console.WriteLine(updater.RequestQuitAndInstall().Kind);
+updater.MarkFailure("install-failed");
+Console.WriteLine(updater.RequestRollback("1.0.0").Kind);
 Console.WriteLine(string.Join(">", updater.Trace.Select(item => item.Name)));
 
 try
@@ -83,6 +85,8 @@ state = 'Downloaded'; trace.push('update-downloaded');
 trace.push('persist-downloaded-update'); console.log('PersistDownloadedUpdate');
 trace.push('rollback-point');
 state = 'InstallRequested'; trace.push('quit-and-install'); console.log('QuitAndInstall');
+state = 'Failed'; trace.push('error');
+state = 'RollbackRequested'; trace.push('rollback'); console.log('Rollback');
 console.log(trace.join('>'));
 console.log('linux:unsupported');
 console.log('mac:unsigned');
