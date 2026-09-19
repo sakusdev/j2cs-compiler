@@ -5,11 +5,11 @@ import type { RequirementsProof, Proof, Predicate } from '../rules/requirements.
 import type { ClassExpr, ParsedClass, ParsedClassProgram, ParsedStaticMethod } from '../parser/classes.js';
 
 const CLASS_RULES = {
-  staticMethod: { id: 'classes.static.method_direct', sha256: '5f30a276cf69511f0e2d5620392f0fc037b2fcdc90fd20fd453f2654928ae523', lowering: 'class.static.method.direct' },
+  staticMethod: { id: 'classes.static.method_direct', sha256: 'bfbf41f7c27e28e6c4a4a9d1cff0f272ac34a0d972335180311c21c21c0e9f29', lowering: 'class.static.method.direct' },
   staticInit: { id: 'classes.static.initialization_order', sha256: '6eca4988bdd2031025f146a2d3d0588f30f6b1a7c2e172878cb136a15329cb81', lowering: 'JsClass.Initialize' },
-  staticInheritance: { id: 'classes.static.field_inheritance', sha256: 'ce153ca29d115ba1934b09a61ee880038aeb2e347cea4de8f4da80d0dbda1142', lowering: 'JsClass.GetStatic/SetStatic' },
+  staticInheritance: { id: 'classes.static.field_inheritance', sha256: 'f27473aefbc1467b55305a558e960db176b20a61e26c12b48057795270f78409', lowering: 'JsClass.GetStatic/SetStatic' },
   extendsStatic: { id: 'classes.extends.static_base', sha256: '36ee16ec999b23c7b61f9d1f83288c62b2cd4fe40cd6870131f25812d52cdb93', lowering: 'class.extends.closed-world' },
-  baseField: { id: 'classes.field.public_base_initializer_order', sha256: '59c8ad9932a88e395a5ba8e218d0f97a0367f468c701c2e1f0d105898db6c8a9', lowering: 'deferred.instance-field.base' },
+  baseField: { id: 'classes.field.public_base_initializer_order', sha256: 'a82ff7b1b18c38ff3116b0a25655dcab4107c9b2f96e97e8875130f5a1c0498e', lowering: 'deferred.instance-field.base' },
   derivedField: { id: 'classes.field.public_derived_initializer_order', sha256: 'c2ca6ea3bbe559921027b9c862acabb01d83bb5e1252103c68ebde7d58128326', lowering: 'deferred.instance-field.derived' },
   derivedCtor: { id: 'classes.constructor.derived_super_first', sha256: '25c3f5abcc8a5d328048041afab5f9ee095bcd5ecb6334edeca875aeabb74c50', lowering: 'deferred.constructor.super' },
   superInstance: { id: 'classes.super.instance_property', sha256: 'eadab2b0e0b25790908af52d81fea5d1fac18a3d3383745213bf6934cf5d7be7', lowering: 'deferred.JsSuper' },
