@@ -33,8 +33,8 @@ test('object/array core selects canonical safe rules and preserves identity in e
   assert.ok(r.trace.some(t => t.ruleId === 'array.prototype.push' && t.requirements.verdict === 'proven'));
   assert.ok(r.trace.some(t => t.ruleId === 'object.has-own' && t.requirements.verdict === 'proven'));
   assert.ok(r.trace.some(t => t.ruleId === 'operators.strict-equality.dynamic' && t.requirements.verdict === 'proven'));
-  assert.match(r.source, /JsObject\\.Create\\(\\)/); assert.match(r.source, /JsArray\\.Create\\(3d\\)/);
-  assert.ok(!/\\bdynamic\\b|\\bobject\\b/.test(r.source));
+  assert.match(r.source, /JsObject\.Create\(\)/); assert.match(r.source, /JsArray\.Create\(3d\)/);
+  assert.ok(!/\bdynamic\b|\bobject\b/.test(r.source));
 });
 test('type annotations are not semantic evidence', () => {
   const r = compile("const x: number = 'a'; console.log(x + 1);", index, 'input.ts');
