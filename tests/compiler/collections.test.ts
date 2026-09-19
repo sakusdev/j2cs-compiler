@@ -44,7 +44,7 @@ function receiverFacts(kind: CollectionKind): Facts {
 
 test('collection registry pins reviewed canonical j2cs rules and every adapted requirement is provable', () => {
   assert.equal(registry.ruleDbCommit, '35ca8d859f9352e90ee2497f4ac8f6edb9c19ed1');
-  assert.equal(registry.adapters.length, 31);
+  assert.equal(registry.adapters.length, 30);
   verifyCollectionAdapters(database, registry);
 
   for (const adapter of registry.adapters) {
