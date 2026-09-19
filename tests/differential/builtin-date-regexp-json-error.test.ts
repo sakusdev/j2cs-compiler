@@ -52,16 +52,16 @@ internal static class Program
         JsConsole.Log(JsValue.FromNumber(JsDate.ParseStandard(JsValue.FromString("1970-01-01"))));
         JsConsole.Log(JsValue.FromNumber(JsDate.ParseStandard(JsValue.FromString("1970-01-01T01:00:00+01:00"))));
 
-        var parsed = JsJson.Parse(JsValue.FromString("{\\\"2\\\":\\\"b\\\",\\\"1\\\":\\\"a\\\",\\\"x\\\":-0,\\\"u\\\":\\\"ok\\\"}"));
+        var parsed = JsJson.Parse(JsValue.FromString("{\"2\":\"b\",\"1\":\"a\",\"x\":-0,\"u\":\"ok\"}"));
         JsConsole.Log(JsJson.Stringify(parsed));
         var specials = JsArray.Create(0d);
         JsArray.Push(specials, JsValue.FromNumber(double.NaN), JsValue.FromNumber(double.PositiveInfinity),
             JsValue.FromNumber(double.NegativeInfinity), JsValue.FromNumber(-0.0d), JsUndefined.Value);
         JsConsole.Log(JsJson.Stringify(specials));
-        JsConsole.Log(JsJson.Stringify(JsValue.FromString("\\ud800")));
+        JsConsole.Log(JsJson.Stringify(JsValue.FromString("\ud800")));
         try
         {
-            _ = JsJson.Parse(JsValue.FromString("{\\\"a\\\":1,}"));
+            _ = JsJson.Parse(JsValue.FromString("{\"a\":1,}"));
         }
         catch (JsSyntaxErrorException error)
         {
