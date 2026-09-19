@@ -130,7 +130,8 @@ public static class NodePath
         else if (result.Length == 0) result = ".";
         else if (device.Length != 0 && !absolute && result == device) result += ".";
 
-        if (trailingSeparator && tail.Length != 0 && !result.EndsWith("\\", StringComparison.Ordinal))
+        if (trailingSeparator && !result.EndsWith("\\", StringComparison.Ordinal)
+            && (tail.Length != 0 || !absolute))
             result += "\\";
 
         return result;
