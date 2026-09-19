@@ -66,7 +66,7 @@ static string Resolve(string parent, string specifier) => (parent, specifier) sw
 var runtime = new JsCommonJsRuntime(Resolve);
 runtime.RegisterModule("/a.cjs", a =>
 {
-    Console.WriteLine("load-a");
+    JsConsole.Log(JsValue.FromString("load-a"));
     JsObject.SetProperty(a.Exports, "before", JsValue.FromString("before"));
     var b = a.Require("./b.cjs");
     JsConsole.Log(JsValue.FromString("cycle"), JsObject.GetProperty(b, "sawBefore"));
