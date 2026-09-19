@@ -86,8 +86,7 @@ public static class NodeFs
     {
         var access = flag switch
         {
-            "r" or "rs" => FileAccess.Read,
-            "r+" or "rs+" => FileAccess.ReadWrite,
+            "r" => FileAccess.Read,
             _ => throw InvalidFlag(flag),
         };
         return new FileStream(path, FileMode.Open, access, FileShare.ReadWrite | FileShare.Delete, 4096,
@@ -98,10 +97,10 @@ public static class NodeFs
     {
         var mode = flag switch
         {
-            "w" or "w+" => FileMode.Create,
-            "wx" or "xw" or "wx+" or "xw+" => FileMode.CreateNew,
-            "a" or "a+" => FileMode.Append,
-            "ax" or "xa" or "ax+" or "xa+" => FileMode.CreateNew,
+            "w" => FileMode.Create,
+            "wx" or "xw" => FileMode.CreateNew,
+            "a" => FileMode.Append,
+            "ax" or "xa" => FileMode.CreateNew,
             _ => throw InvalidFlag(flag),
         };
         return new FileStream(path, mode, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 4096,
@@ -109,7 +108,7 @@ public static class NodeFs
     }
 
     internal static bool IsExclusiveWriteFlag(string flag)
-        => flag is "wx" or "xw" or "wx+" or "xw+" or "ax" or "xa" or "ax+" or "xa+";
+        => flag is "wx" or "xw" or "ax" or "xa";
 
     internal static bool EntryExists(string path) => File.Exists(path) || Directory.Exists(path);
 
