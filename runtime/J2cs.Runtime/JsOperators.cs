@@ -63,45 +63,46 @@ public static class JsOperators
 
 public static class JsReference
 {
-    public static JsValue Assign(ref JsValue binding, JsValue value) => binding = value;
+    public static JsValue Assign(JsEnvironment environment, int bindingId, JsValue value)
+        => environment.Assign(bindingId, value);
 
-    public static JsValue AddAssign(ref JsValue binding, JsValue current, JsValue right)
-        => binding = JsOperators.Add(current, right);
+    public static JsValue AddAssign(JsEnvironment environment, int bindingId, JsValue current, JsValue right)
+        => environment.Assign(bindingId, JsOperators.Add(current, right));
 
-    public static JsValue SubtractAssignNumber(ref JsValue binding, JsValue current, JsValue right)
-        => AssignNumber(ref binding, current.Number - right.Number);
+    public static JsValue SubtractAssignNumber(JsEnvironment environment, int bindingId, JsValue current, JsValue right)
+        => AssignNumber(environment, bindingId, current.Number - right.Number);
 
-    public static JsValue MultiplyAssignNumber(ref JsValue binding, JsValue current, JsValue right)
-        => AssignNumber(ref binding, current.Number * right.Number);
+    public static JsValue MultiplyAssignNumber(JsEnvironment environment, int bindingId, JsValue current, JsValue right)
+        => AssignNumber(environment, bindingId, current.Number * right.Number);
 
-    public static JsValue DivideAssignNumber(ref JsValue binding, JsValue current, JsValue right)
-        => AssignNumber(ref binding, current.Number / right.Number);
+    public static JsValue DivideAssignNumber(JsEnvironment environment, int bindingId, JsValue current, JsValue right)
+        => AssignNumber(environment, bindingId, current.Number / right.Number);
 
-    public static JsValue RemainderAssignNumber(ref JsValue binding, JsValue current, JsValue right)
-        => AssignNumber(ref binding, current.Number % right.Number);
+    public static JsValue RemainderAssignNumber(JsEnvironment environment, int bindingId, JsValue current, JsValue right)
+        => AssignNumber(environment, bindingId, current.Number % right.Number);
 
-    public static JsValue PrefixIncrementNumber(ref JsValue binding, JsValue current)
-        => AssignNumber(ref binding, current.Number + 1d);
+    public static JsValue PrefixIncrementNumber(JsEnvironment environment, int bindingId, JsValue current)
+        => AssignNumber(environment, bindingId, current.Number + 1d);
 
-    public static JsValue PostfixIncrementNumber(ref JsValue binding, JsValue current)
+    public static JsValue PostfixIncrementNumber(JsEnvironment environment, int bindingId, JsValue current)
     {
-        binding = JsValue.FromNumber(current.Number + 1d);
+        environment.Assign(bindingId, JsValue.FromNumber(current.Number + 1d));
         return current;
     }
 
-    public static JsValue PrefixDecrementNumber(ref JsValue binding, JsValue current)
-        => AssignNumber(ref binding, current.Number - 1d);
+    public static JsValue PrefixDecrementNumber(JsEnvironment environment, int bindingId, JsValue current)
+        => AssignNumber(environment, bindingId, current.Number - 1d);
 
-    public static JsValue PostfixDecrementNumber(ref JsValue binding, JsValue current)
+    public static JsValue PostfixDecrementNumber(JsEnvironment environment, int bindingId, JsValue current)
     {
-        binding = JsValue.FromNumber(current.Number - 1d);
+        environment.Assign(bindingId, JsValue.FromNumber(current.Number - 1d));
         return current;
     }
 
-    private static JsValue AssignNumber(ref JsValue binding, double value)
+    private static JsValue AssignNumber(JsEnvironment environment, int bindingId, double value)
     {
         var result = JsValue.FromNumber(value);
-        binding = result;
+        environment.Assign(bindingId, result);
         return result;
     }
 }
