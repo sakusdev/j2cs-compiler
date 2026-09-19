@@ -81,6 +81,36 @@ const fixtures: Fixture[] = [
     console.log(choose(true)); console.log(choose(false));
     console.log(partial(false), partial(true), empty(), fallthrough(), nestedCall(4));
   ` },
+  { name: 'function-values-closures-recursion-arity', source: `
+    function sum(n) { if (n <= 0) return 0; return n + sum(n - 1); }
+    console.log(sum(5));
+
+    function even(n) { if (n === 0) return true; return odd(n - 1); }
+    function odd(n) { if (n === 0) return false; return even(n - 1); }
+    console.log(even(8), odd(7));
+
+    function outer(start) {
+      let x = start;
+      function inc(step) { x = x + step; return x; }
+      return inc;
+    }
+    const a = outer(10); const same = a; const b = outer(10);
+    console.log(a === same, a === b, a(1), a(2), b(5));
+
+    const twice = function(x) { return x * 2; };
+    console.log(twice(4), twice === twice);
+
+    function missing(a,b) { return b; }
+    console.log(missing(1) === undefined);
+    let side = 0; function first(a) { return a; }
+    console.log(first(7, side = 9), side);
+
+    function apply(f,x) { return f(x); }
+    console.log(apply(twice, 6));
+
+    function makeObject() { return { value: 1 }; }
+    console.log(makeObject() === makeObject());
+  ` },
   { name: 'evaluation-order', source: `
     function mark(x) { console.log(x); return x; }
     function combine(a,b) { return a*10+b; }
