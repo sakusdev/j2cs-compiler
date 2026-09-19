@@ -32,6 +32,9 @@ const noFinalHook: Predicate = { fact: 'node.stream.customFinalHook', equals: fa
 const noReadHook: Predicate = { fact: 'node.stream.customReadHook', equals: false };
 const bufferViewOnly: Predicate = { fact: 'node.buffer.viewOperation', equals: 'sliceOrSubarray' };
 const bufferMetadataUnobserved: Predicate = { fact: 'node.buffer.metadataObserved', equals: false };
+const bufferFromSupported: Predicate = { fact: 'node.buffer.fromProfile', equals: 'supported' };
+const bufferAllocSupported: Predicate = { fact: 'node.buffer.allocProfile', equals: 'byteFillOrDefault' };
+const bufferByteLengthSupported: Predicate = { fact: 'node.buffer.byteLengthProfile', equals: 'supported' };
 
 export const NODE_COMPAT_ADAPTERS: readonly NodeCompatAdapter[] = [
   { ruleId: 'node.events.event-emitter.constructor', sha256: '7ae8c721a6499d2f4ddf2ea7b40998524ffcf96033c346d1affd6152a44ac44d', helper: 'NodeEvents.Create' },
@@ -51,9 +54,9 @@ export const NODE_COMPAT_ADAPTERS: readonly NodeCompatAdapter[] = [
   { ruleId: 'node.stream.writable.finish', sha256: 'a423f29ceace75c7c4bbffa79aae15ce0d21b3dd26145e0a3c0dc124e05e2d7b', helper: 'NodeStreams.OnFinish', requires: [schedulerCompatible, metaEventsUnobserved, noFinalHook] },
   { ruleId: 'node.stream.duplex.constructor', sha256: 'c3aa992608e7d69483960078defd83f0c8999dae9a1614ffce896c1451912f74', helper: 'NodeStreams.CreateDuplex', requires: [schedulerCompatible, noReadHook, noFinalHook] },
 
-  { ruleId: 'binary.buffer.from', sha256: 'd659b88ab766c3aff57f1afc3a21ae9e8d057c617572aa04a978e35f685cd040', helper: 'NodeBuffer.From' },
-  { ruleId: 'binary.buffer.alloc', sha256: 'd3c73cc08f689cc9fc51b41e4b02a6e37972ce951ec9559a26a94c0c6488775e', helper: 'NodeBuffer.Alloc' },
-  { ruleId: 'binary.buffer.byte-length', sha256: 'fb9725b22158a08ad5355bb223622253321bc6473a3e725bdf0636a13b2a3f11', helper: 'NodeBuffer.ByteLength' },
+  { ruleId: 'binary.buffer.from', sha256: 'd659b88ab766c3aff57f1afc3a21ae9e8d057c617572aa04a978e35f685cd040', helper: 'NodeBuffer.From', requires: [bufferFromSupported] },
+  { ruleId: 'binary.buffer.alloc', sha256: 'd3c73cc08f689cc9fc51b41e4b02a6e37972ce951ec9559a26a94c0c6488775e', helper: 'NodeBuffer.Alloc', requires: [bufferAllocSupported] },
+  { ruleId: 'binary.buffer.byte-length', sha256: 'fb9725b22158a08ad5355bb223622253321bc6473a3e725bdf0636a13b2a3f11', helper: 'NodeBuffer.ByteLength', requires: [bufferByteLengthSupported] },
   { ruleId: 'binary.buffer.view', sha256: 'da2797e6e0f19aded9da0a3d6896058806b60e52644ee7aa21bea54fe501f718', helper: 'NodeBuffer.View', requires: [bufferViewOnly, bufferMetadataUnobserved] },
 ];
 
