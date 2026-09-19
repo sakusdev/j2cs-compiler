@@ -19,10 +19,11 @@ function bindingFacts(f: Facts, b: Binding): void {
   if (b.kind === 'intrinsic') f.prove('binding.globalProperty', b.name, 'Unshadowed intrinsic resolution')
     .prove('binding.intrinsic', `%${b.name}%`, 'Intrinsic binding identity');
 }
-function functionFacts(f: Facts): void {
+function functionFacts(f: Facts, observes: readonly string[] = [], usedWithNew = false): void {
+  const completeObservations = [...new Set([...observes, ...(usedWithNew ? ['construct'] : [])])].sort();
   f.prove('function.kind', 'ordinary', 'Parser admits only ordinary declarations')
     .prove('function.scope', 'module', 'Binder admits only top-level module-local functions')
-    .prove('function.observes', [], 'Syntax/binding checks reject this, arguments, new.target, identity, properties, construction and escape')
+    .prove('function.observes', completeObservations, 'Complete admitted function meta-binding and construction-use analysis')
     .prove('function.parameters', 'simple', 'Parser rejects default/rest/optional/destructured parameters');
 }
 function receiverFacts(f: Facts, e: SemanticExpr): void {
@@ -77,7 +78,7 @@ export function expressionFacts(e: SemanticExpr): Facts {
     else if (e.target === 'object.hasOwn') f.prove('member.integrity', 'pristine', 'Direct unshadowed Object.hasOwn with static key')
       .prove('object.ownPropertyTest', true, 'JsObject/JsArray explicitly preserve own-property presence separately from undefined');
     else if (typeof e.target === 'number') {
-      functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
+      functionFacts(f, e.observes ?? []); f.prove('call.argumentCount', e.args.length, 'AST argument count')
         .prove('function.parameterCount', e.arity, 'Resolved declaration signature');
     } else {
       f.prove('call.argumentCount', e.args.length, 'AST intrinsic argument count');
@@ -94,9 +95,21 @@ export function expressionFacts(e: SemanticExpr): Facts {
       }
     }
   }
+  if (e.kind === 'construct') {
+    functionFacts(f, e.observes, true);
+    f.prove('constructor.kind', 'ordinary', 'Direct resolved function declaration is an ordinary ECMAScript constructor')
+      .prove('constructor.constructable', true, 'Only ordinary function declarations are admitted as construction targets')
+      .prove('constructor.returnObject', e.mayReturnObject, 'Constructor completion analysis records whether an object may be returned')
+      .prove('constructor.prototypeMutable', false, 'Function values/properties cannot escape or be mutated in this isolated lane')
+      .prove('construction.targetKnown', true, 'Binder resolved the new-expression callee to one function declaration')
+      .prove('call.argumentCount', e.args.length, 'AST construction argument count')
+      .prove('function.parameterCount', e.arity, 'Resolved constructor declaration signature');
+  }
+  if (e.kind === 'newTarget')
+    f.prove('meta.insideFunction', true, 'new.target nodes are admitted only inside analyzed function invocation context');
   receiverFacts(f, e);
   return f;
 }
 export function declarationFacts(fn: SemanticFunction): Facts {
-  const f = programFacts(); functionFacts(f); bindingFacts(f, fn.binding); return f;
+  const f = programFacts(); functionFacts(f, fn.observes, fn.usedWithNew); bindingFacts(f, fn.binding); return f;
 }
