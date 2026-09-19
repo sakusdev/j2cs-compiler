@@ -36,12 +36,19 @@ export function resolveBindings(program: Program): Bindings {
     if (b.kind !== 'let' && b.kind !== 'parameter') fail('E_IMMUTABLE_WRITE', `Assignment to '${b.name}' is unsupported (${b.kind}).`, span);
     return b;
   }
-  function expr(n: Expr, s: Scope, use: 'value' | 'callee' | 'receiver' = 'value'): void {
+  function expr(n: Expr, s: Scope, use: 'value' | 'callee' | 'receiver' | 'construct' = 'value'): void {
     switch (n.kind) {
       case 'literal': return;
+      case 'thisValue':
+        if (s.owner === 0) fail('E_THIS_CONTEXT', 'Top-level this is outside the closed module profile.', n.span);
+        return;
+      case 'newTarget':
+        if (s.owner === 0) fail('E_NEW_TARGET_CONTEXT', 'new.target is only valid inside a function.', n.span);
+        return;
       case 'identifier': {
         const b = resolve(n, s);
-        if (b.kind === 'function' && use !== 'callee') fail('E_FUNCTION_VALUE', 'Function identity/escape is unsupported; use a direct call.', n.span);
+        if (b.kind === 'function' && use !== 'callee' && use !== 'construct')
+          fail('E_FUNCTION_VALUE', 'Function identity/escape is unsupported; use a direct call or construction.', n.span);
         if (b.kind === 'intrinsic' && ['console', 'Object'].includes(b.name) && use !== 'receiver')
           fail('E_INTRINSIC_ESCAPE', `${b.name} may only be used as the direct receiver of a supported intrinsic call.`, n.span);
         if (b.kind === 'intrinsic' && callableIntrinsics.has(b.name) && use !== 'callee')
@@ -67,6 +74,16 @@ export function resolveBindings(program: Program): Bindings {
       case 'update': writable(n.target, s, n.span); return;
       case 'member': expr(n.object, s, 'receiver'); return;
       case 'call': expr(n.callee, s, 'callee'); n.args.forEach(a => expr(a, s)); return;
+      case 'construct': {
+        if (n.callee.kind !== 'identifier')
+          fail('E_CONSTRUCT_TARGET', 'Only a statically resolved ordinary function constructor is supported.', n.callee.span);
+        expr(n.callee, s, 'construct');
+        const target = references.get(n.callee.id)!;
+        if (target.kind !== 'function')
+          fail('E_CONSTRUCT_TARGET', `Construction target '${n.callee.name}' is not a proven ordinary function.`, n.callee.span);
+        n.args.forEach(a => expr(a, s));
+        return;
+      }
     }
   }
   function body(nodes: Statement[], s: Scope, top = false, loopDepth = 0): void {
