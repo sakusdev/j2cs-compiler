@@ -1,11 +1,12 @@
 import { fail } from '../diagnostics/index.js';
 import type { Expr, FunctionDeclaration, Node, Program, Statement } from '../parser/ast.js';
 export interface Binding {
-  id: number; name: string; kind: 'const' | 'let' | 'parameter' | 'function' | 'intrinsic';
-  owner: number; declaration?: Node; function?: FunctionDeclaration;
+  id: number; name: string; kind: 'const' | 'let' | 'parameter' | 'function' | 'intrinsic' | 'arguments';
+  owner: number; declaration?: Node; function?: FunctionDeclaration; observed?: boolean;
 }
 export interface Bindings {
   references: Map<number, Binding>; declarations: Map<number, Binding>; functions: Binding[];
+  functionArguments: Map<number, Binding>;
 }
 interface Scope { parent?: Scope; owner: number; names: Map<string, Binding> }
 const intrinsics = ['undefined', 'NaN', 'Infinity', 'console', 'Object', 'isFinite', 'isNaN', 'parseFloat', 'parseInt'];
@@ -13,6 +14,7 @@ const callableIntrinsics = new Set(['isFinite', 'isNaN', 'parseFloat', 'parseInt
 export function resolveBindings(program: Program): Bindings {
   let nextId = 0;
   const references = new Map<number, Binding>(), declarations = new Map<number, Binding>(), functions: Binding[] = [];
+  const functionArguments = new Map<number, Binding>();
   const global: Scope = { owner: -1, names: new Map() };
   for (const name of intrinsics) global.names.set(name, { id: nextId++, name, kind: 'intrinsic', owner: -1 });
   function declare(scope: Scope, n: Node, name: string, kind: Binding['kind'], fn?: FunctionDeclaration): Binding {
@@ -23,13 +25,17 @@ export function resolveBindings(program: Program): Bindings {
     if (fn) functions.push(b);
     return b;
   }
+  function implicitArguments(scope: Scope, fn: FunctionDeclaration): Binding {
+    const b: Binding = { id: nextId++, name: 'arguments', kind: 'arguments', owner: scope.owner, function: fn };
+    scope.names.set('arguments', b); functionArguments.set(fn.id, b); return b;
+  }
   function resolve(n: Expr & { kind: 'identifier' }, scope: Scope): Binding {
     let s: Scope | undefined = scope, b: Binding | undefined;
     while (s && !(b = s.names.get(n.name))) s = s.parent;
     if (!b) fail('E_UNRESOLVED_BINDING', `Unresolved identifier '${n.name}'.`, n.span);
     if (b.owner !== scope.owner && b.kind !== 'function' && b.kind !== 'intrinsic')
       fail('E_CAPTURE', `Capture of '${b.name}' needs closure/TDZ analysis, which is not implemented.`, n.span);
-    references.set(n.id, b); return b;
+    b.observed = true; references.set(n.id, b); return b;
   }
   function writable(n: Expr & { kind: 'identifier' }, scope: Scope, span: Node['span']): Binding {
     const b = resolve(n, scope);
@@ -42,12 +48,15 @@ export function resolveBindings(program: Program): Bindings {
       case 'identifier': {
         const b = resolve(n, s);
         if (b.kind === 'function' && use !== 'callee') fail('E_FUNCTION_VALUE', 'Function identity/escape is unsupported; use a direct call.', n.span);
+        if (b.kind === 'arguments' && use !== 'receiver')
+          fail('E_ARGUMENTS_ESCAPE', 'The arguments object may currently only be observed through supported static properties.', n.span);
         if (b.kind === 'intrinsic' && ['console', 'Object'].includes(b.name) && use !== 'receiver')
           fail('E_INTRINSIC_ESCAPE', `${b.name} may only be used as the direct receiver of a supported intrinsic call.`, n.span);
         if (b.kind === 'intrinsic' && callableIntrinsics.has(b.name) && use !== 'callee')
           fail('E_INTRINSIC_ESCAPE', `${b.name} may only be used as a direct intrinsic call.`, n.span);
         return;
       }
+      case 'spread': expr(n.operand, s); return;
       case 'object': n.properties.forEach(p => expr(p.value, s)); return;
       case 'array': n.elements.forEach(e => { if (e) expr(e, s); }); return;
       case 'binary': expr(n.left, s); expr(n.right, s); return;
@@ -106,12 +115,14 @@ export function resolveBindings(program: Program): Bindings {
         if (n.value) expr(n.value, s); return;
       case 'function': {
         const fs: Scope = { parent: s, owner: n.id + 1, names: new Map() };
+        implicitArguments(fs, n);
         for (const p of n.params) declare(fs, p, p.name, 'parameter');
+        for (const p of n.params) if (p.initializer) expr(p.initializer, fs);
         body(n.body.body, fs, false, 0); return;
       }
       case 'empty': return;
     }
   }
   body(program.body, { parent: global, owner: 0, names: new Map() }, true, 0);
-  return { references, declarations, functions };
+  return { references, declarations, functions, functionArguments };
 }
