@@ -383,8 +383,27 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
             types: target === 'isFinite' || target === 'isNaN' ? ['Boolean'] : ['Number'] };
         }
         if (binding.kind !== 'function') fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
-        const args = n.args.map(a => expression(a, f)), instance = instantiate(binding, args, n);
-        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length, types: instance.returnTypes };
+        const args = n.args.map(a => expression(a, f));
+        const summary = instantiate(binding, args, n, 'call'), instance = summary.instance;
+        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length,
+          observes: instance.observes, types: instance.returnTypes };
+      }
+      case 'construct': {
+        if (n.callee.kind !== 'identifier') fail('E_CONSTRUCT_TARGET', 'Only direct known constructors are supported.', n.callee.span);
+        const binding = bindings.references.get(n.callee.id)!;
+        if (binding.kind !== 'function') fail('E_CONSTRUCT_TARGET', 'Construction requires a proven ordinary function.', n.callee.span);
+        const args = n.args.map(a => expression(a, f));
+        constructedBindings.add(binding.id);
+        const summary = instantiate(binding, args, n, 'construct'), instance = summary.instance;
+        if (!summary.constructShape || !summary.constructTypes)
+          fail('E_CONSTRUCTOR_ANALYSIS', 'Constructor result summary is unavailable.', n.span);
+        const ref = n.id;
+        f.heap.set(ref, cloneShape(summary.constructShape));
+        return {
+          ...n, kind: 'construct', binding, target: instance.instanceId, args, arity: instance.params.length,
+          mayReturnObject: instance.mayReturnObject === true, observes: instance.observes,
+          types: summary.constructTypes, refs: [ref],
+        };
       }
     }
   }
@@ -409,7 +428,12 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       case 'block': return { ...n, body: statements(n.body, f, loop) };
       case 'return': {
         const value = n.value ? expression(n.value, f) : syntheticUndefined(n);
-        if (hasReference(value.types)) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Returning Object/Array values from specialized functions is deferred.', n.span);
+        const context = currentInvocation();
+        if (context?.mode === 'construct') {
+          context.outcomes!.push({ returned: valueOf(value), heap: cloneHeap(f.heap) });
+        } else if (hasReference(value.types)) {
+          fail('E_OBJECT_FUNCTION_BOUNDARY', 'Returning Object/Array values from ordinary specialized calls is deferred.', n.span);
+        }
         f.returns.push(value.types); f.reachable = false; return { ...n, value };
       }
       case 'break': {
