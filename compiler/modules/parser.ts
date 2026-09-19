@@ -28,7 +28,7 @@ function moduleSpecifier(sf: ts.SourceFile, n: ts.Expression | undefined, owner:
 }
 
 function exportedName(n: ts.ModuleExportName): string {
-  return ts.isIdentifier(n) || ts.isStringLiteral(n) ? n.text : String(n.getText());
+  return n.text;
 }
 
 function declarationNames(sf: ts.SourceFile, statement: ts.VariableStatement): string[] {
