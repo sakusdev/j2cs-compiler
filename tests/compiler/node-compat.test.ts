@@ -60,7 +60,8 @@ test('Buffer.from proof requires binding, member integrity and overload resoluti
   const facts = new Facts()
     .prove('node.binding', 'Buffer', 'binding inference')
     .prove('node.member.integrity', 'pristine', 'member integrity')
-    .prove('node.buffer.overloadResolved', true, 'overload analysis');
+    .prove('node.buffer.overloadResolved', true, 'overload analysis')
+    .prove('node.buffer.fromProfile', 'supported', 'lowering profile');
   const proof = index.prove('binary.buffer.from', facts);
   assert.equal(proof.verdict, 'proven');
   assert.equal(proof.helper, 'NodeBuffer.From');
