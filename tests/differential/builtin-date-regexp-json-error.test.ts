@@ -67,7 +67,7 @@ internal static class Program
         {
             JsConsole.Log(JsError.Name(error.Value));
         }
-        var cycle = JsObject.Create();
+        var cycle = JsJson.Parse(JsValue.FromString("{}"));
         JsObject.SetProperty(cycle, "self", cycle);
         try
         {

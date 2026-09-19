@@ -73,14 +73,14 @@ export const dateRegExpJsonErrorAdapters: readonly BuiltinRuleAdapter[] = [
     ruleId: 'json.stringify.basic',
     sha256: 'c23c3260c8bdf9b674dbb7b7f315ebb1d3aa1db0fe6bf1859c0392e9412176c7',
     lowering: 'JsJson.Stringify',
-    guards: { 'reachable.toJSON': false, 'reachable.accessor': false },
+    guards: { 'reachable.toJSON': false, 'reachable.accessor': false, 'reachable.objectRepresentation': 'json-owned-or-array' },
   },
   {
     operation: 'json.stringify.number-specials',
     ruleId: 'json.stringify.basic',
     sha256: 'c23c3260c8bdf9b674dbb7b7f315ebb1d3aa1db0fe6bf1859c0392e9412176c7',
     lowering: 'JsJson.Stringify',
-    guards: { 'reachable.toJSON': false, 'reachable.accessor': false },
+    guards: { 'reachable.toJSON': false, 'reachable.accessor': false, 'reachable.objectRepresentation': 'json-owned-or-array' },
   },
   {
     operation: 'json.stringify.number-specials',
@@ -93,7 +93,7 @@ export const dateRegExpJsonErrorAdapters: readonly BuiltinRuleAdapter[] = [
     ruleId: 'json.stringify.basic',
     sha256: 'c23c3260c8bdf9b674dbb7b7f315ebb1d3aa1db0fe6bf1859c0392e9412176c7',
     lowering: 'JsJson.Stringify',
-    guards: { 'reachable.toJSON': false, 'reachable.accessor': false },
+    guards: { 'reachable.toJSON': false, 'reachable.accessor': false, 'reachable.objectRepresentation': 'json-owned-or-array' },
   },
   {
     operation: 'json.stringify.string',

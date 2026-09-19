@@ -57,6 +57,7 @@ test('issue #30 builtin proof adapters pin canonical j2cs rules and require comp
     value_may_contain_number: true,
     'reachable.toJSON': false,
     'reachable.accessor': false,
+    'reachable.objectRepresentation': 'json-owned-or-array',
   });
   assert.equal(jsonStringify.verdict, 'proven');
   assert.deepEqual(jsonStringify.rules.map(r => r.ruleId), ['json.stringify.basic', 'json.stringify.number-specials']);

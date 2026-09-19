@@ -5,10 +5,41 @@ namespace J2cs.Runtime;
 
 /// <summary>
 /// ECMAScript JSON semantics over JsValue/JsObject for the proof-gated no-hook subset.
-/// This intentionally does not delegate to a CLR serializer.
+/// Ordinary object enumeration is deliberately isolated in JsonObject so this lane does
+/// not depend on sibling changes to the shared JsObject representation.
 /// </summary>
 public static class JsJson
 {
+    private sealed class JsonObject : JsObject
+    {
+        private readonly Dictionary<string, JsValue> own = new(StringComparer.Ordinal);
+        private readonly List<string> order = [];
+
+        protected override bool TryGetOwn(string key, out JsValue value) => own.TryGetValue(key, out value);
+
+        protected override void SetOwn(string key, JsValue value)
+        {
+            if (!own.ContainsKey(key)) order.Add(key);
+            own[key] = value;
+        }
+
+        public override bool HasOwnProperty(string key) => own.ContainsKey(key);
+
+        internal IEnumerable<KeyValuePair<string, JsValue>> OrderedOwn()
+        {
+            var entries = order
+                .Where(own.ContainsKey)
+                .Select((key, ordinal) => (pair: new KeyValuePair<string, JsValue>(key, own[key]), ordinal, index: ArrayIndex(key)))
+                .ToList();
+            foreach (var item in entries.Where(x => x.index.HasValue).OrderBy(x => x.index!.Value))
+                yield return item.pair;
+            foreach (var item in entries.Where(x => !x.index.HasValue).OrderBy(x => x.ordinal))
+                yield return item.pair;
+        }
+
+        internal static JsValue CreateJsonObject() => JsValue.FromReference(new JsonObject());
+    }
+
     public static JsValue Parse(JsValue input)
     {
         if (input.Kind == JsKind.Object)
@@ -50,8 +81,10 @@ public static class JsJson
                 return "[" + string.Join(",", items) + "]";
             }
 
+            if (reference is not JsonObject jsonObject)
+                throw new NotSupportedException("JSON.stringify ordinary Object awaits the shared enumerable-own-property contract.");
             var members = new List<string>();
-            foreach (var pair in OrderedOwnData(reference))
+            foreach (var pair in jsonObject.OrderedOwn())
             {
                 var serialized = Serialize(pair.Value, active, false);
                 if (serialized is not null) members.Add(Quote(pair.Key) + ":" + serialized);
@@ -62,15 +95,6 @@ public static class JsJson
         {
             active.Remove(reference);
         }
-    }
-
-    private static IEnumerable<KeyValuePair<string, JsValue>> OrderedOwnData(JsObject value)
-    {
-        var entries = value.EnumerateOwnData().Select((pair, order) => (pair, order, index: ArrayIndex(pair.Key))).ToList();
-        foreach (var item in entries.Where(x => x.index.HasValue).OrderBy(x => x.index!.Value))
-            yield return item.pair;
-        foreach (var item in entries.Where(x => !x.index.HasValue).OrderBy(x => x.order))
-            yield return item.pair;
     }
 
     private static uint? ArrayIndex(string key)
@@ -149,7 +173,7 @@ public static class JsJson
         private JsValue Object()
         {
             cursor++;
-            var result = JsObject.Create();
+            var result = JsonObject.CreateJsonObject();
             Skip();
             if (Take('}')) return result;
             while (true)
