@@ -114,10 +114,13 @@ const fixtures: Fixture[] = [
   { name: 'closure-capture-type-widening', source: `
     let x = 1;
     function f() { return x + 1; }
+    function g() { return f(); }
     console.log(f());
+    console.log(g());
     x = 'a';
     console.log(f());
-  `, stdout: '2\na1\n' },
+    console.log(g());
+  `, stdout: '2\n2\na1\na1\n' },
   { name: 'evaluation-order', source: `
     function mark(x) { console.log(x); return x; }
     function combine(a,b) { return a*10+b; }
