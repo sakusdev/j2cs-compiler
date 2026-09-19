@@ -164,7 +164,7 @@ export function analyzeClassProgram(program: ParsedClassProgram, database: RuleD
     if (item.kind === 'class') {
       for (const element of item.elements) {
         if (element.kind === 'staticField') walkExpr(element.initializer, inspect);
-        if (element.kind === 'staticMethod') walkExpr(element.result, inspect);
+        if (element.kind === 'staticMethod' && element.result) walkExpr(element.result, inspect);
       }
     } else if (item.kind === 'console') item.args.forEach(e => walkExpr(e, inspect));
     else if (item.kind === 'staticCall') walkExpr(item.call, inspect);
