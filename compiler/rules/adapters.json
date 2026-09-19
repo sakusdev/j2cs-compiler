@@ -734,6 +734,238 @@
           "equals": "primitive"
         }
       ]
+    },
+    {
+      "ruleId": "array.prototype.at",
+      "sha256": "6380c47996f4d2dac819ada37fc6abc2b27be5c284ba7495be65b5fb2ad7c4d6",
+      "selector": {
+        "kind": "array.at"
+      },
+      "lowering": "array.at",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 1
+        },
+        {
+          "fact": "builtin.coercionInputsPrimitive",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "ruleId": "array.prototype.includes",
+      "sha256": "1a72813a77f9820aff893210f5f741af285a7fe3d4d46efcdc3059cc3a28c143",
+      "selector": {
+        "kind": "array.includes"
+      },
+      "lowering": "array.includes",
+      "requires": [
+        {
+          "any": [
+            {
+              "fact": "call.argumentCount",
+              "equals": 1
+            },
+            {
+              "fact": "call.argumentCount",
+              "equals": 2
+            }
+          ]
+        },
+        {
+          "fact": "builtin.coercionInputsPrimitive",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "ruleId": "array.prototype.indexof",
+      "sha256": "8691d0cb9ec0df53137913d3c74c96793866b4914b39e83393856640034080b2",
+      "selector": {
+        "kind": "array.indexOf"
+      },
+      "lowering": "array.indexOf",
+      "requires": [
+        {
+          "any": [
+            {
+              "fact": "call.argumentCount",
+              "equals": 1
+            },
+            {
+              "fact": "call.argumentCount",
+              "equals": 2
+            }
+          ]
+        },
+        {
+          "fact": "builtin.coercionInputsPrimitive",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "ruleId": "array.prototype.pop",
+      "sha256": "460e4c08cd2ae5210797485c410cb66c37787622a3429b22bf7d84297891b3de",
+      "selector": {
+        "kind": "array.pop"
+      },
+      "lowering": "array.pop",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "ruleId": "string.length",
+      "sha256": "dcd5d7bf42f5bafb4d9d2d3e6485109babbee8efb61e0b98c47f32da6fca9d11",
+      "selector": {
+        "kind": "string.length"
+      },
+      "lowering": "string.length"
+    },
+    {
+      "ruleId": "string.prototype.at",
+      "sha256": "dc2a59ebbbd9c3841705d839f4045ee13c6a05e6adcba434bbab4c3229f36164",
+      "selector": {
+        "kind": "string.at"
+      },
+      "lowering": "string.at",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 1
+        },
+        {
+          "fact": "builtin.coercionInputsPrimitive",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "ruleId": "string.prototype.charat",
+      "sha256": "ee783b0ebc045e479bd327d5ee28e8d260be8c2d41206e57eee046b1ef0a9e04",
+      "selector": {
+        "kind": "string.charAt"
+      },
+      "lowering": "string.charAt",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 1
+        },
+        {
+          "fact": "builtin.coercionInputsPrimitive",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "ruleId": "string.prototype.includes",
+      "sha256": "daf623d8387243646b90788bb946eace625f732e57c6a412d8c661b1bb2c34de",
+      "selector": {
+        "kind": "string.includes"
+      },
+      "lowering": "string.includes",
+      "requires": [
+        {
+          "any": [
+            {
+              "fact": "call.argumentCount",
+              "equals": 1
+            },
+            {
+              "fact": "call.argumentCount",
+              "equals": 2
+            }
+          ]
+        },
+        {
+          "fact": "builtin.coercionInputsPrimitive",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "ruleId": "string.prototype.indexof",
+      "sha256": "dbb713ed4451dea97bc61fca7d77631b097c130b7e0f62e9300c4ebf9900edde",
+      "selector": {
+        "kind": "string.indexOf"
+      },
+      "lowering": "string.indexOf",
+      "requires": [
+        {
+          "any": [
+            {
+              "fact": "call.argumentCount",
+              "equals": 1
+            },
+            {
+              "fact": "call.argumentCount",
+              "equals": 2
+            }
+          ]
+        },
+        {
+          "fact": "builtin.coercionInputsPrimitive",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "ruleId": "string.prototype.slice",
+      "sha256": "1ba66ba6b156b8be60dc70618e3a10eacb9269ab61094730e24ea732675204c8",
+      "selector": {
+        "kind": "string.slice"
+      },
+      "lowering": "string.slice",
+      "requires": [
+        {
+          "any": [
+            {
+              "fact": "call.argumentCount",
+              "equals": 1
+            },
+            {
+              "fact": "call.argumentCount",
+              "equals": 2
+            }
+          ]
+        },
+        {
+          "fact": "builtin.coercionInputsPrimitive",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "ruleId": "string.prototype.substring",
+      "sha256": "79840a4c00357989a4e37a05efcfda34d986cff3ed2fb2889f9f74bf38a8381e",
+      "selector": {
+        "kind": "string.substring"
+      },
+      "lowering": "string.substring",
+      "requires": [
+        {
+          "any": [
+            {
+              "fact": "call.argumentCount",
+              "equals": 1
+            },
+            {
+              "fact": "call.argumentCount",
+              "equals": 2
+            }
+          ]
+        },
+        {
+          "fact": "builtin.coercionInputsPrimitive",
+          "equals": true
+        }
+      ]
     }
   ]
 }
