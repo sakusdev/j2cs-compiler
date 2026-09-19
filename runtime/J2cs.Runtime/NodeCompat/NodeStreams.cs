@@ -144,7 +144,7 @@ public sealed class NodeReadable
             var node = queue.First ?? throw new InvalidOperationException("Readable buffer accounting invariant violated");
             var source = node.Value.Chunk.Buffer;
             var take = Math.Min(source.Length, count - destinationOffset);
-            source.CopyTo(result.ToArrayUnsafe(), destinationOffset, 0, take);
+            for (var i = 0; i < take; i++) result[destinationOffset + i] = source[i];
             destinationOffset += take;
             BufferedLength -= take;
 
@@ -287,7 +287,7 @@ public sealed class NodeWritable
             return;
         }
 
-        if (needDrain && BufferedLength < HighWaterMark)
+        if (needDrain && (BufferedLength < HighWaterMark || (HighWaterMark == 0 && BufferedLength == 0)))
         {
             needDrain = false;
             events.Emit("drain");
