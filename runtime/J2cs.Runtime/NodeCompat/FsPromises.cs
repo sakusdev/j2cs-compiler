@@ -4,7 +4,7 @@ public interface INodePromiseScheduler
 {
     bool PreservesJavaScriptMicrotaskOrdering { get; }
 
-    Task<T> Schedule<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken);
+    Task<T> BridgeHostTask<T>(Task<T> hostTask, CancellationToken cancellationToken);
 }
 
 public static class NodeFsPromises
@@ -16,7 +16,8 @@ public static class NodeFsPromises
         CancellationToken cancellationToken = default)
     {
         RequireCompatibleScheduler(scheduler);
-        return scheduler.Schedule(token => ReadFileCoreAsync(path, options ?? NodeFsReadFileOptions.BufferDefault, token), cancellationToken);
+        var hostTask = ReadFileCoreAsync(path, options ?? NodeFsReadFileOptions.BufferDefault, cancellationToken);
+        return scheduler.BridgeHostTask(hostTask, cancellationToken);
     }
 
     public static Task<JsValue> WriteFileAsync(
@@ -30,7 +31,8 @@ public static class NodeFsPromises
         RequireCompatibleScheduler(scheduler);
         var actual = options ?? NodeFsWriteFileOptions.Default;
         var bytes = NodeFsEncodingCodec.Encode(data, actual.Encoding);
-        return scheduler.Schedule(token => WriteFileCoreAsync(path, bytes, actual, token), cancellationToken);
+        var hostTask = WriteFileCoreAsync(path, bytes, actual, cancellationToken);
+        return scheduler.BridgeHostTask(hostTask, cancellationToken);
     }
 
     public static Task<JsValue> WriteFileAsync(
@@ -43,7 +45,8 @@ public static class NodeFsPromises
         ArgumentNullException.ThrowIfNull(data);
         RequireCompatibleScheduler(scheduler);
         var actual = options ?? NodeFsWriteFileOptions.Default;
-        return scheduler.Schedule(token => WriteFileCoreAsync(path, data.Memory, actual, token), cancellationToken);
+        var hostTask = WriteFileCoreAsync(path, data.Memory, actual, cancellationToken);
+        return scheduler.BridgeHostTask(hostTask, cancellationToken);
     }
 
     private static void RequireCompatibleScheduler(INodePromiseScheduler scheduler)
