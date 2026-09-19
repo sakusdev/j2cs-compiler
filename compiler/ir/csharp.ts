@@ -22,7 +22,7 @@ export type CsStatement =
   | { kind: 'break' }
   | { kind: 'continue' }
   | { kind: 'return'; value: CsExpr };
-export interface CsFunction { name: string; params: string[]; body: CsStatement[] }
+export interface CsFunction { name: string; params: string[]; argumentsParam?: string; body: CsStatement[] }
 export interface CsProgram { body: CsStatement[]; functions: CsFunction[] }
 export function box(value: CsExpr): CsExpr {
   if (value.repr === 'value') return value;
