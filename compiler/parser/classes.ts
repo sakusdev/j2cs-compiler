@@ -13,7 +13,7 @@ export interface ParsedStaticField {
   kind: 'staticField'; name: string; initializer: ClassExpr; span: Span;
 }
 export interface ParsedStaticMethod {
-  kind: 'staticMethod'; name: string; params: string[]; result: ClassExpr;
+  kind: 'staticMethod'; name: string; params: string[]; result?: ClassExpr;
   usesThis: boolean; usesSuper: boolean; span: Span;
 }
 export interface ParsedInstanceField {
@@ -157,7 +157,8 @@ export function parseClassProgram(source: string, file = 'input.js'): ParsedClas
           if (member.parameters.length) unsupported(member, 'Static method parameters (argument semantics are owned by a sibling lane)');
           if (member.body.statements.length !== 1 || !ts.isReturnStatement(member.body.statements[0])
             || !member.body.statements[0].expression) unsupported(member, 'Static method body outside a single return expression');
-          elements.push({ kind: 'staticMethod', name, params: [], result: valueExpr(member.body.statements[0].expression),
+          elements.push({ kind: 'staticMethod', name, params: [],
+            result: flags.usesThis || flags.usesSuper ? undefined : valueExpr(member.body.statements[0].expression),
             ...flags, span: span(member) });
         } else {
           elements.push({ kind: 'instanceMethod', name, ...flags, span: span(member) });
