@@ -18,7 +18,10 @@ export type Expr = Node & (
   | { kind: 'member'; object: Expr; property: string }
   | { kind: 'object'; properties: ObjectProperty[] }
   | { kind: 'array'; elements: (Expr | null)[] }
+  | { kind: 'thisValue' }
+  | { kind: 'newTarget' }
   | { kind: 'call'; callee: Expr; args: Expr[] }
+  | { kind: 'construct'; callee: Expr; args: Expr[] }
 );
 export interface Parameter extends Node { name: string }
 export type Statement = Node & (
