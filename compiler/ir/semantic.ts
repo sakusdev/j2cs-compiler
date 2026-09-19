@@ -41,7 +41,7 @@ export type SemanticStatement = Node & (
   | { kind: 'return'; value: SemanticExpr }
 );
 export interface SemanticParameter {
-  binding: Binding; index: number; rest: boolean;
+  binding: Binding; index: number; rest: boolean; hasDefault: boolean;
   initialization: 'argument' | 'default-always' | 'default-conditional' | 'rest';
   initializer?: SemanticExpr;
 }
