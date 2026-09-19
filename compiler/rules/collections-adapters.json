@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "ruleDbCommit": "35ca8d859f9352e90ee2497f4ac8f6edb9c19ed1",
+  "adapters": [
+    {
+      "ruleId": "map.constructor.empty",
+      "sha256": "91723847227b523c79888e00982de829f2d1fcae066b7a8626fed47dcc714e3d",
+      "strategy": "helper",
+      "lowering": "map.create"
+    },
+    {
+      "ruleId": "map.prototype.set",
+      "sha256": "efdb854f5a71534c353ae55bdf60143307fc516f1aab31ef4380f571b9f71575",
+      "strategy": "helper",
+      "lowering": "map.set"
+    },
+    {
+      "ruleId": "map.prototype.get",
+      "sha256": "c0cfd2483abeab5e79e09d6834529286dd5013190e31676b57bdfb288347a60c",
+      "strategy": "helper",
+      "lowering": "map.get"
+    },
+    {
+      "ruleId": "map.prototype.has",
+      "sha256": "3823e8664a23650bfba72bc3abcefebeb811ff43444e2c07e2cc4e96f8941519",
+      "strategy": "helper",
+      "lowering": "map.has"
+    },
+    {
+      "ruleId": "map.prototype.delete",
+      "sha256": "7c0dbd95bf7cb66b62265bc71b9a9ab90e560e71f50993d8743ae6f2c1556ba3",
+      "strategy": "helper",
+      "lowering": "map.delete"
+    },
+    {
+      "ruleId": "map.prototype.clear",
+      "sha256": "12bca942275c3e63797c4fb32ef4099916048d8c4f5d7447a521681e92fb4570",
+      "strategy": "helper",
+      "lowering": "map.clear"
+    },
+    {
+      "ruleId": "map.prototype.size",
+      "sha256": "de76d019466544b6744da98a7a1acf84fb62652d2e85907a09c839a5489b972a",
+      "strategy": "helper",
+      "lowering": "map.size"
+    },
+    {
+      "ruleId": "map.prototype.keys",
+      "sha256": "305de371f741cb9230ac542b9f95f057717f6a3a680ceeda46fd4b70d1690f03",
+      "strategy": "helper",
+      "lowering": "map.keys"
+    },
+    {
+      "ruleId": "map.prototype.values",
+      "sha256": "4fabe3ab90313f0f7c7949135ae3dc79f4e2152e98c0752458f1cdd7f4de5f5c",
+      "strategy": "helper",
+      "lowering": "map.values"
+    },
+    {
+      "ruleId": "map.prototype.entries",
+      "sha256": "ed18096d471bf84c8d6abef3b42b0e63d90c109f11a4e7cc68b492fa0513b3ed",
+      "strategy": "helper",
+      "lowering": "map.entries"
+    },
+    {
+      "ruleId": "map.prototype.iterator",
+      "sha256": "9991f667854267124c031007153f0f2482ff9afea0694906094bc1bca995ddc5",
+      "strategy": "helper",
+      "lowering": "map.iterator"
+    },
+    {
+      "ruleId": "set.constructor.empty",
+      "sha256": "3c0eccb988d2d0cde531d2d6c501529fd85ea2db0d7814de3f60f4b7c3ef5370",
+      "strategy": "helper",
+      "lowering": "set.create"
+    },
+    {
+      "ruleId": "set.prototype.add",
+      "sha256": "136cd8be299b930cc775d706d9671325c6f296058277d6c24a48e099a289bd7f",
+      "strategy": "helper",
+      "lowering": "set.add"
+    },
+    {
+      "ruleId": "set.prototype.has",
+      "sha256": "0963361667f2cc9b48067f880023043bf849715e2f9b672185814b4753854ea7",
+      "strategy": "helper",
+      "lowering": "set.has"
+    },
+    {
+      "ruleId": "set.prototype.delete",
+      "sha256": "04b47d99bb62891c13a182345ac2eb94917bd598c565e1c5d5fe1bdd3eae5c35",
+      "strategy": "helper",
+      "lowering": "set.delete"
+    },
+    {
+      "ruleId": "set.prototype.clear",
+      "sha256": "22d4b85996c5ceb2e6135c5768361c9af5d2307260330619c526bd3ec9ceeda2",
+      "strategy": "helper",
+      "lowering": "set.clear"
+    },
+    {
+      "ruleId": "set.prototype.size",
+      "sha256": "8f9e306b91d6523c18f30a6ff5863a1faff7bcf70d7425ae70ecc12081777023",
+      "strategy": "helper",
+      "lowering": "set.size"
+    },
+    {
+      "ruleId": "set.prototype.keys",
+      "sha256": "fe2a1c2cd7db0db88d87e58747688f7566d14ee64ca38838f5dfa8d818953757",
+      "strategy": "helper",
+      "lowering": "set.keys"
+    },
+    {
+      "ruleId": "set.prototype.values",
+      "sha256": "258f88b27f4668f1c6f38fbe8fc920c7cbadabaf35c71889df8d23dc267a92b6",
+      "strategy": "helper",
+      "lowering": "set.values"
+    },
+    {
+      "ruleId": "set.prototype.entries",
+      "sha256": "d5fe96997b8ba4fa98c7047daeb9e2308dff6ad873f16e8407485791b9606774",
+      "strategy": "helper",
+      "lowering": "set.entries"
+    },
+    {
+      "ruleId": "set.prototype.iterator",
+      "sha256": "38a41fd8557221367903284f49944d46af25da990f2ba2901684ae494ace15bb",
+      "strategy": "helper",
+      "lowering": "set.iterator"
+    },
+    {
+      "ruleId": "weakmap.constructor.empty",
+      "sha256": "fa364c36490fb5c13b5743ccd0be92c77d2b189d3011c77432e55b4d6fb589cc",
+      "strategy": "runtime",
+      "lowering": "weakmap.create"
+    },
+    {
+      "ruleId": "weakmap.prototype.set",
+      "sha256": "b0226c5b5abc34aeed29efe72014846e3ad7150e2d3515e152a42acbc51d1f0a",
+      "strategy": "runtime",
+      "lowering": "weakmap.set"
+    },
+    {
+      "ruleId": "weakmap.prototype.get",
+      "sha256": "2b57f548e2e4562aa70cae8407b3f555ba367a640c74b26c34a4cd94b32e4691",
+      "strategy": "runtime",
+      "lowering": "weakmap.get"
+    },
+    {
+      "ruleId": "weakmap.prototype.has",
+      "sha256": "b5d29c34abd26d7e952a55706083838e17a769739214d12ea3d6ce115f7804b1",
+      "strategy": "runtime",
+      "lowering": "weakmap.has"
+    },
+    {
+      "ruleId": "weakmap.prototype.delete",
+      "sha256": "08c1a7dc2e52fba39c58b9fae42c6e661866fdf51104ccadc7a5df6175adf01c",
+      "strategy": "runtime",
+      "lowering": "weakmap.delete"
+    },
+    {
+      "ruleId": "weakset.constructor.empty",
+      "sha256": "680a8e242fd105063d042b2a502c18837e5c90ccead7c4a52ac72a45fd653a0f",
+      "strategy": "runtime",
+      "lowering": "weakset.create"
+    },
+    {
+      "ruleId": "weakset.prototype.add",
+      "sha256": "9c68a509d96d851814eacdb0a18e00cc7429e4b56580a67ff32086ad2449d8ef",
+      "strategy": "runtime",
+      "lowering": "weakset.add"
+    },
+    {
+      "ruleId": "weakset.prototype.has",
+      "sha256": "5aa1871782eca6fd3836ef5011df080c1fde47b69b47248faa1c772061754f3e",
+      "strategy": "runtime",
+      "lowering": "weakset.has"
+    },
+    {
+      "ruleId": "weakset.prototype.delete",
+      "sha256": "c8c0e0d9d122e863636f7690d1db935111765f042396b762ae6eb0c9ad927403",
+      "strategy": "runtime",
+      "lowering": "weakset.delete"
+    }
+  ]
+}
