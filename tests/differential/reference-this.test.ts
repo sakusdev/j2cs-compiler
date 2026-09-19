@@ -33,8 +33,8 @@ async function buildProbe(source: string) {
 
 test('Node vs C#: property-reference and ordinary this binding contract', { timeout: 90_000 }, async () => {
   const nodeSource = `
-    const o = { m: function(){ 'use strict'; return this === o; } };
-    console.log(o.m());
+    const o = { m: function(){ 'use strict'; return this; } };
+    console.log(o.m() === o);
     const f = o.m;
     console.log(f.call(undefined) === undefined);
     function strictProbe(){ 'use strict'; return this; }
