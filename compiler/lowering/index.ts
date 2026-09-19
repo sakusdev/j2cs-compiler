@@ -4,22 +4,23 @@ import type { Binding } from '../analysis/bindings.js';
 import type { SemanticExpr as SE, SemanticProgram, SemanticStatement as SS } from '../ir/semantic.js';
 import { box, unbox, type CsExpr as CE, type CsProgram, type CsStatement as CS } from '../ir/csharp.js';
 import { RuleIndex, type Candidate, type Selector } from '../rules/index.js';
-import { declarationFacts, expressionFacts, programFacts } from '../rules/facts.js';
+import { expressionFacts, programFacts } from '../rules/facts.js';
 import type { FactModel } from '../analysis/facts.js';
 export interface Trace {
   ruleId: string; strategy: string; lowering: string; span: Span; sha256: string;
   requirements: Candidate['proof']; rejected: { id: string; verdict: string }[]; ambiguous: string[];
 }
 export interface LoweredProgram { ir: CsProgram; trace: Trace[]; structuralContracts: string[] }
-const variable = (b: Binding): string => `b${b.id}`;
 const call = (target: string, args: CE[], repr: CE['repr'] = 'value'): CE => ({ kind: 'call', target, args, repr });
-const read = (b: Binding): CE => ({ kind: 'read', repr: 'value', name: variable(b) });
-const ref = (b: Binding): CE => ({ kind: 'ref', repr: 'value', name: variable(b) });
+const env = (): CE => ({ kind: 'environment', repr: 'environment' });
+const intLiteral = (value: number): CE => ({ kind: 'literal', repr: 'integer', value });
+const read = (b: Binding): CE => call('JsEnvironment.Read', [env(), intLiteral(b.id)]);
 const undef = (): CE => ({ kind: 'member', repr: 'value', name: 'JsUndefined.Value' });
 const stringLiteral = (value: string): CE => ({ kind: 'literal', repr: 'string', value });
 const numberLiteral = (value: number): CE => ({ kind: 'literal', repr: 'number', value });
 export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgram {
   const trace: Trace[] = [], contracts = new Set<string>();
+  const instanceById = new Map(program.functions.map(fn => [fn.instanceId, fn]));
   function select(selector: Selector, facts: FactModel, span: Span): string {
     const result = index.select(selector, facts), chosen = result.selected;
     if (!chosen || chosen.loaded.rule.strategy === 'unsupported') {
@@ -61,8 +62,14 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
         });
         return result;
       }
+      case 'functionValue': {
+        contracts.add('core.function-object.runtime-v1');
+        if ((program.captures.get(e.binding.function!.id + 1)?.length ?? 0) > 0)
+          contracts.add('core.lexical-closure.shared-cell-v1');
+        return { kind: 'functionCreate', repr: 'value', templateId: e.binding.id };
+      }
       case 'read':
-        if (e.binding.kind !== 'intrinsic') { contracts.add('core.lexical-read'); return { kind: 'read', repr: 'value', name: variable(e.binding) }; }
+        if (e.binding.kind !== 'intrinsic') { contracts.add('core.lexical-read'); return read(e.binding); }
         switch (select({ kind: 'intrinsic', intrinsic: e.binding.name }, facts, e.span)) {
           case 'intrinsic.undefined': return undef();
           case 'intrinsic.nan': return box({ kind: 'member', repr: 'number', name: 'double.NaN' });
@@ -72,7 +79,7 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
       case 'assign': {
         const op = select({ kind: 'assign' }, facts, e.span);
         if (op !== 'helper.assign') fail('E_LOWERING', 'Assignment adapter has no implementation.', e.span);
-        return call('JsReference.Assign', [ref(e.binding), expression(e.value)]);
+        return call('JsReference.Assign', [env(), intLiteral(e.binding.id), expression(e.value)]);
       }
       case 'compound': {
         const op = select({ kind: 'compound', operator: e.op }, facts, e.span);
@@ -85,7 +92,7 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
         }[op];
         if (!target) return fail('E_LOWERING', `Unimplemented compound lowering ${op}.`, e.span);
         // C# evaluates arguments left-to-right: capture GetValue before evaluating RHS.
-        return call(target, [ref(e.binding), read(e.binding), expression(e.value)]);
+        return call(target, [env(), intLiteral(e.binding.id), read(e.binding), expression(e.value)]);
       }
       case 'update': {
         const selectorOp = `${e.prefix ? 'prefix' : 'postfix'}${e.op}`;
@@ -97,7 +104,7 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           'helper.postfixDecrementNumber': 'JsReference.PostfixDecrementNumber',
         }[op];
         if (!target) return fail('E_LOWERING', `Unimplemented update lowering ${op}.`, e.span);
-        return call(target, [ref(e.binding), read(e.binding)]);
+        return call(target, [env(), intLiteral(e.binding.id), read(e.binding)]);
       }
       case 'propertyAssign':
         contracts.add('core.ordinary-own-property-write-v1');
@@ -157,8 +164,15 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           return box(call('JsObject.HasOwn', [expression(e.receiver), stringLiteral(e.property)], 'boolean'));
         }
         if (typeof e.target === 'number') {
-          select({ kind: 'call.function' }, facts, e.span);
-          return call(`F${e.target}`, e.args.map(expression));
+          const selector = e.callMode === 'missing' ? { kind: 'call.function.missing' as const }
+            : e.callMode === 'extra' ? { kind: 'call.function.extra' as const }
+            : { kind: 'call.function' as const };
+          const op = select(selector, facts, e.span);
+          if (op !== 'call.function') fail('E_LOWERING', 'Function call adapter has no implementation.', e.span);
+          const instance = instanceById.get(e.target)!;
+          contracts.add('core.function-call.lexical-environment-v1');
+          return { kind: 'functionCall', repr: 'value', callee: expression(e.callee), templateId: e.binding.id,
+            body: `F${e.target}`, params: instance.params.map(p => p.id), args: e.args.map(expression) };
         }
         const op = select({ kind: 'call.intrinsic', intrinsic: e.target }, facts, e.span);
         const args = e.args.map(expression);
@@ -190,7 +204,7 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
   }
   function statement(s: SS): CS {
     switch (s.kind) {
-      case 'variable': contracts.add('core.lexical-initialization'); return { kind: 'variable', name: variable(s.binding), initializer: expression(s.initializer) };
+      case 'variable': contracts.add('core.lexical-initialization'); return { kind: 'binding', id: s.binding.id, initializer: expression(s.initializer) };
       case 'expression': return { kind: 'expression', expression: expression(s.expression) };
       case 'block': return { kind: 'block', body: s.body.map(statement) };
       case 'if': return { kind: 'if', condition: condition(s.condition), then: statement(s.then), otherwise: s.otherwise && statement(s.otherwise) };
@@ -214,9 +228,19 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
         return { kind: 'return', value: expression(s.value) };
     }
   }
-  const functions = program.functions.map(fn => {
-    select({ kind: 'function' }, declarationFacts(fn), fn.span);
-    return { name: `F${fn.instanceId}`, params: fn.params.map(variable), body: fn.body.map(statement) };
-  });
-  return { ir: { functions, body: program.body.map(statement) }, trace, structuralContracts: [...contracts].sort() };
+  function hoists(owner: number): CS[] {
+    const declarations = program.templates.filter(b => b.function?.kind === 'function' && b.owner === owner);
+    if (declarations.length) {
+      contracts.add('core.function-declaration.hoist-runtime-v1');
+      contracts.add('core.function-object.runtime-v1');
+    }
+    return declarations.map(b => ({ kind: 'binding', id: b.id,
+      initializer: { kind: 'functionCreate', repr: 'value', templateId: b.id } }));
+  }
+  const functions = program.functions.map(fn => ({
+    name: `F${fn.instanceId}`,
+    body: [...hoists(fn.binding.function!.id + 1), ...fn.body.map(statement)],
+  }));
+  return { ir: { functions, body: [...hoists(0), ...program.body.map(statement)] },
+    trace, structuralContracts: [...contracts].sort() };
 }
