@@ -1,8 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { parse } from './parser/index.js';
+import { parseClassProgram } from './parser/classes.js';
 import { resolveBindings } from './analysis/bindings.js';
 import { analyze } from './analysis/index.js';
+import { compileClassProgram } from './analysis/classCompiler.js';
 import { loadRules } from './rules/loader.js';
 import { loadAdapters, RuleIndex } from './rules/index.js';
 import { lower } from './lowering/index.js';
@@ -12,6 +14,8 @@ export async function createCompiler(ruleDb = path.join(ROOT, 'rule-db')): Promi
   return new RuleIndex(await loadRules(ruleDb), await loadAdapters(path.join(ROOT, 'compiler/rules/adapters.json')));
 }
 export function compile(source: string, index: RuleIndex, file = 'input.js') {
+  const classProgram = parseClassProgram(source, file);
+  if (classProgram) return compileClassProgram(classProgram, index);
   const ast = parse(source, file), bindings = resolveBindings(ast), semantics = analyze(ast, bindings);
   const lowered = lower(semantics, index);
   return { source: emitCSharp(lowered.ir), ...lowered };
