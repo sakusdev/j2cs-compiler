@@ -10,6 +10,12 @@ type Environment = Map<number, ValueInfo>;
 interface Flow { env: Environment; heap: Map<number, Shape>; reachable: boolean; returns: TypeSet[]; loopDepth: number }
 interface State { env: Environment; heap: Map<number, Shape> }
 interface LoopControl { breaks: State[]; continues: State[] }
+interface ConstructorOutcome { returned: ValueInfo; heap: Map<number, Shape> }
+interface InvocationContext {
+  mode: 'call' | 'construct'; binding: Binding; instanceId: number; observes: Set<string>;
+  receiver?: ValueInfo; receiverRef?: number; outcomes?: ConstructorOutcome[];
+}
+interface InstanceSummary { instance: SemanticFunction; constructTypes?: TypeSet; constructShape?: Shape }
 const MAX_LOOP_FIXPOINT = 16;
 const UNDEFINED: ValueInfo = { types: ['Undefined'] };
 const objectPrototypeKeys = new Set(['__proto__', 'constructor', 'hasOwnProperty', 'isPrototypeOf',
@@ -21,7 +27,8 @@ const arrayPrototypeKeys = new Set(['at', 'concat', 'copyWithin', 'entries', 'ev
   'splice', 'toLocaleString', 'toReversed', 'toSorted', 'toSpliced', 'toString', 'unshift', 'values', 'with']);
 
 export function analyze(program: Program, bindings: Bindings): SemanticProgram {
-  const instances: SemanticFunction[] = [], cache = new Map<string, SemanticFunction>(), active = new Set<number>();
+  const instances: SemanticFunction[] = [], cache = new Map<string, InstanceSummary>(), active = new Set<number>();
+  const invocations: InvocationContext[] = [], constructedBindings = new Set<number>();
   let nextInstance = 0;
   const syntheticUndefined = (n: Node): SE => ({ ...n, kind: 'literal', value: undefined, types: ['Undefined'] });
   const valueOf = (e: SE): ValueInfo => ({ types: e.types, ...(e.refs ? { refs: e.refs } : {}) });
