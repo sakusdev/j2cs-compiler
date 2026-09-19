@@ -117,9 +117,11 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       if (b.name === 'NaN' || b.name === 'Infinity') return { types: ['Number'] };
       return fail('E_INTRINSIC_ESCAPE', `Intrinsic '${b.name}' is not a first-class value in this profile.`, n.span);
     }
-    const value = f.env.get(b.id);
-    if (!value) fail('E_TDZ', `Binding '${b.name}' is accessed before initialization.`, n.span);
-    return value;
+    const value = f.env.get(b.id), summary = summaries.get(b.id);
+    if (value) return bindings.capturedIds.has(b.id) && summary ? unionValue(value, summary) : value;
+    if (b.owner !== f.owner && summary) return summary;
+    if (b.kind === 'function') return functionValue(b);
+    return fail('E_TDZ', `Binding '${b.name}' is accessed before initialization.`, n.span);
   }
   function addTypes(left: TypeSet, right: TypeSet): TypeSet {
     if (hasReference(left) || hasReference(right)) return ['Number', 'String'];
@@ -127,6 +129,8 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     return left.includes('String') || right.includes('String') ? ['Number', 'String'] : ['Number'];
   }
   function requireReference(value: SE, f: Flow, operation: string): readonly number[] {
+    if (value.types.includes('Function'))
+      fail('E_FUNCTION_PROPERTY', `${operation} on function objects requires callable-object property semantics that are deferred.`, value.span);
     if (value.types.some(t => t !== 'Object' && t !== 'Array') || !value.refs?.length)
       fail('E_PROPERTY_RECEIVER', `${operation} requires a proven compiler-owned Object/Array receiver.`, value.span);
     for (const ref of value.refs) if (!f.heap.has(ref)) fail('E_PROPERTY_FLOW', 'Object identity escaped the analyzable heap.', value.span);
@@ -159,24 +163,87 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
     }
   }
+  function guessedReturnTypes(b: Binding, params: Map<number, ValueInfo>): TypeSet {
+    const guesses: TypeSet[] = [];
+    const guess = (n: Expr): TypeSet | undefined => {
+      switch (n.kind) {
+        case 'literal': return literalType(n.value);
+        case 'functionExpr': return ['Function'];
+        case 'identifier': {
+          const binding = bindings.references.get(n.id);
+          if (!binding) return;
+          if (binding.kind === 'intrinsic') {
+            if (binding.name === 'undefined') return ['Undefined'];
+            if (binding.name === 'NaN' || binding.name === 'Infinity') return ['Number'];
+            return;
+          }
+          return params.get(binding.id)?.types ?? summaries.get(binding.id)?.types
+            ?? (binding.kind === 'function' ? ['Function'] : undefined);
+        }
+        case 'binary': {
+          if (['<', '<=', '>', '>=', '==', '!=', '===', '!=='].includes(n.op)) return ['Boolean'];
+          if (n.op !== '+') return ['Number'];
+          const l=guess(n.left), r=guess(n.right);
+          return l && r ? addTypes(l,r) : ['Number','String'];
+        }
+        case 'unary': return [n.op === '!' ? 'Boolean' : 'Number'];
+        case 'assign': return guess(n.value);
+        case 'compound': return n.op === '+=' ? ['Number','String'] : ['Number'];
+        case 'update': return ['Number'];
+        case 'object': return ['Object'];
+        case 'array': return ['Array'];
+        case 'member': case 'call': return;
+      }
+    };
+    const scan = (nodes: Statement[]): void => {
+      for (const n of nodes) {
+        if (n.kind === 'return') guesses.push(n.value ? (guess(n.value) ?? []) : ['Undefined']);
+        else if (n.kind === 'block') scan(n.body);
+        else if (n.kind === 'if') {
+          if (n.then.kind === 'block') scan(n.then.body); else scan([n.then]);
+          if (n.otherwise) n.otherwise.kind === 'block' ? scan(n.otherwise.body) : scan([n.otherwise]);
+        } else if (n.kind === 'while' || n.kind === 'doWhile' || n.kind === 'for') {
+          n.body.kind === 'block' ? scan(n.body.body) : scan([n.body]);
+        }
+      }
+    };
+    scan(b.function!.body.body);
+    const useful=guesses.filter(g=>g.length);
+    return useful.length ? union(...useful) : ['Undefined'];
+  }
+
   function instantiate(b: Binding, args: SE[], callNode: Node): SemanticFunction {
     const fn = b.function!;
-    if (args.length !== fn.params.length) fail('E_ARITY', 'Only exact-arity direct function calls are supported.', callNode.span);
-    if (args.some(a => hasReference(a.types)))
+    if (args.some(a => a.types.some(t => t === 'Object' || t === 'Array')))
       fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object/Array arguments require alias/effect summaries and are deferred.', callNode.span);
-    if (active.has(b.id)) fail('E_RECURSION', 'Recursive call graphs require a summary fixed point; unsupported in this MVP.', callNode.span);
-    const key = `${b.id}:${args.map(a => a.types.join('|')).join(',')}`;
+    const params = fn.params.map(p => bindings.declarations.get(p.id)!);
+    const formal = params.map((_, i) => args[i] ?? syntheticUndefined(callNode));
+    const key = `${b.id}:${formal.map(a => `${a.types.join('|')}#${(a.functionIds??[]).join('|')}`).join(',')}`;
     const found = cache.get(key); if (found) return found;
-    active.add(b.id);
-    const instanceId = nextInstance++, params = fn.params.map(p => bindings.declarations.get(p.id)!);
-    const f: Flow = { env: new Map(params.map((p, i) => [p.id, valueOf(args[i]!)])), heap: new Map(), reachable: true, returns: [], loopDepth: 0 };
-    const body = statements(fn.body.body, f);
-    if (f.reachable) {
-      const value = syntheticUndefined(fn.body);
-      body.push({ ...fn.body, kind: 'return', value }); f.returns.push(value.types);
+    const seedEnv = new Map(params.map((p, i) => [p.id, valueOf(formal[i]!)]));
+    const instance: SemanticFunction = {
+      ...fn, instanceId: nextInstance++, binding: b, params, body: [],
+      returnTypes: guessedReturnTypes(b, seedEnv), returnFunctionIds: [],
+    };
+    instances.push(instance); cache.set(key, instance);
+    let previousTypes = '', previousFunctions = '';
+    for (let pass=0; pass<8; pass++) {
+      const f: Flow = { env: new Map(params.map((p, i) => [p.id, valueOf(formal[i]!) ])),
+        heap: new Map(), reachable: true, returns: [], loopDepth: 0, owner: fn.id + 1 };
+      params.forEach((p,i)=>record(p,valueOf(formal[i]!)));
+      const body = statements(fn.body.body, f);
+      if (f.reachable) {
+        const value = syntheticUndefined(fn.body);
+        body.push({ ...fn.body, kind: 'return', value }); f.returns.push(valueOf(value));
+      }
+      const returnTypes = f.returns.length ? union(...f.returns.map(r=>r.types)) : ['Undefined'] as TypeSet;
+      const returnFunctionIds = [...new Set(f.returns.flatMap(r=>r.functionIds??[]))].sort((a,b)=>a-b);
+      instance.body = body; instance.returnTypes = returnTypes; instance.returnFunctionIds = returnFunctionIds;
+      const typeKey=returnTypes.join('|'), functionKey=returnFunctionIds.join('|');
+      if (typeKey===previousTypes && functionKey===previousFunctions) break;
+      previousTypes=typeKey; previousFunctions=functionKey;
     }
-    const instance: SemanticFunction = { ...fn, instanceId, binding: b, params, body, returnTypes: union(...f.returns) };
-    instances.push(instance); cache.set(key, instance); active.delete(b.id); return instance;
+    return instance;
   }
 
   function expression(n: Expr, f: Flow): SE {
