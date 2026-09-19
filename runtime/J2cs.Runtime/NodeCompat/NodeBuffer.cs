@@ -55,6 +55,13 @@ public sealed class NodeBuffer : JsObject
         return From(value.ToArray());
     }
 
+    public static NodeBuffer From(IEnumerable<double> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        var bytes = values.Select(ToUint8).ToArray();
+        return new NodeBuffer(bytes, 0, bytes.Length);
+    }
+
     public static NodeBuffer FromArrayBuffer(byte[] backingStore, int byteOffset = 0, int? length = null)
     {
         ArgumentNullException.ThrowIfNull(backingStore);
@@ -72,7 +79,17 @@ public sealed class NodeBuffer : JsObject
     }
 
     public static int ByteLength(string value, string encoding = "utf8")
-        => Encode(value ?? throw new ArgumentNullException(nameof(value)), ParseEncoding(encoding)).Length;
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var parsed = TryParseEncoding(encoding, out var known) ? known : NodeBufferEncoding.Utf8;
+        return Encode(value, parsed).Length;
+    }
+
+    public static int ByteLength(NodeBuffer value)
+        => (value ?? throw new ArgumentNullException(nameof(value))).Length;
+
+    public static int ByteLength(byte[] value)
+        => (value ?? throw new ArgumentNullException(nameof(value))).Length;
 
     public static NodeBuffer View(NodeBuffer buffer, int start = 0, int? end = null)
         => (buffer ?? throw new ArgumentNullException(nameof(buffer))).Slice(start, end);
@@ -112,26 +129,34 @@ public sealed class NodeBuffer : JsObject
 
     public static NodeBufferEncoding ParseEncoding(string encoding)
     {
+        if (TryParseEncoding(encoding, out var parsed)) return parsed;
+        throw new ArgumentException($"Unknown Buffer encoding: {encoding}", nameof(encoding));
+    }
+
+    private static bool TryParseEncoding(string encoding, out NodeBufferEncoding parsed)
+    {
         var normalized = (encoding ?? throw new ArgumentNullException(nameof(encoding))).ToLowerInvariant().Replace("-", "");
-        return normalized switch
+        switch (normalized)
         {
-            "utf8" => NodeBufferEncoding.Utf8,
-            "utf16le" or "ucs2" => NodeBufferEncoding.Utf16Le,
-            "latin1" or "binary" => NodeBufferEncoding.Latin1,
-            "ascii" => NodeBufferEncoding.Ascii,
-            "hex" => NodeBufferEncoding.Hex,
-            "base64" => NodeBufferEncoding.Base64,
-            "base64url" => NodeBufferEncoding.Base64Url,
-            _ => throw new ArgumentException($"Unknown Buffer encoding: {encoding}", nameof(encoding))
-        };
+            case "utf8": parsed = NodeBufferEncoding.Utf8; return true;
+            case "utf16le":
+            case "ucs2": parsed = NodeBufferEncoding.Utf16Le; return true;
+            case "latin1":
+            case "binary": parsed = NodeBufferEncoding.Latin1; return true;
+            case "ascii": parsed = NodeBufferEncoding.Ascii; return true;
+            case "hex": parsed = NodeBufferEncoding.Hex; return true;
+            case "base64": parsed = NodeBufferEncoding.Base64; return true;
+            case "base64url": parsed = NodeBufferEncoding.Base64Url; return true;
+            default: parsed = default; return false;
+        }
     }
 
     private static byte[] Encode(string value, NodeBufferEncoding encoding) => encoding switch
     {
         NodeBufferEncoding.Utf8 => Encoding.UTF8.GetBytes(value),
-        NodeBufferEncoding.Utf16Le => Encoding.Unicode.GetBytes(value),
-        NodeBufferEncoding.Latin1 => Encoding.Latin1.GetBytes(value),
-        NodeBufferEncoding.Ascii => value.Select(ch => (byte)(ch & 0x7f)).ToArray(),
+        NodeBufferEncoding.Utf16Le => EncodeUtf16Le(value),
+        NodeBufferEncoding.Latin1 => value.Select(ch => (byte)ch).ToArray(),
+        NodeBufferEncoding.Ascii => value.Select(ch => (byte)ch).ToArray(),
         NodeBufferEncoding.Hex => DecodeHex(value),
         NodeBufferEncoding.Base64 => DecodeBase64(value, false),
         NodeBufferEncoding.Base64Url => DecodeBase64(value, true),
@@ -141,7 +166,7 @@ public sealed class NodeBuffer : JsObject
     private static string Decode(byte[] bytes, int start, int length, NodeBufferEncoding encoding) => encoding switch
     {
         NodeBufferEncoding.Utf8 => Encoding.UTF8.GetString(bytes, start, length),
-        NodeBufferEncoding.Utf16Le => Encoding.Unicode.GetString(bytes, start, length),
+        NodeBufferEncoding.Utf16Le => DecodeUtf16Le(bytes, start, length),
         NodeBufferEncoding.Latin1 => Encoding.Latin1.GetString(bytes, start, length),
         NodeBufferEncoding.Ascii => new string(bytes.Skip(start).Take(length).Select(b => (char)(b & 0x7f)).ToArray()),
         NodeBufferEncoding.Hex => Convert.ToHexString(bytes, start, length).ToLowerInvariant(),
@@ -149,6 +174,35 @@ public sealed class NodeBuffer : JsObject
         NodeBufferEncoding.Base64Url => Convert.ToBase64String(bytes, start, length).TrimEnd('=').Replace('+', '-').Replace('/', '_'),
         _ => throw new InvalidOperationException("Unknown encoding")
     };
+
+    private static byte[] EncodeUtf16Le(string value)
+    {
+        var bytes = new byte[value.Length * 2];
+        for (var i = 0; i < value.Length; i++)
+        {
+            var codeUnit = value[i];
+            bytes[i * 2] = (byte)(codeUnit & 0xff);
+            bytes[i * 2 + 1] = (byte)(codeUnit >> 8);
+        }
+        return bytes;
+    }
+
+    private static string DecodeUtf16Le(byte[] bytes, int start, int length)
+    {
+        var chars = new char[length / 2];
+        for (var i = 0; i < chars.Length; i++)
+            chars[i] = (char)(bytes[start + i * 2] | (bytes[start + i * 2 + 1] << 8));
+        return new string(chars);
+    }
+
+    private static byte ToUint8(double value)
+    {
+        if (!double.IsFinite(value) || value == 0) return 0;
+        var integer = Math.Truncate(value);
+        var modulo = integer % 256;
+        if (modulo < 0) modulo += 256;
+        return (byte)modulo;
+    }
 
     private static byte[] DecodeHex(string value)
     {
