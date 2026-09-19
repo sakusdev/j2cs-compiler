@@ -29,7 +29,9 @@ public sealed class NodeEventListener
 
 public sealed class NodeUnhandledErrorException : Exception
 {
+    public const string ErrorCode = "ERR_UNHANDLED_ERROR";
     public JsValue Context { get; }
+    public string Code => ErrorCode;
     public NodeUnhandledErrorException(JsValue context)
         : base("Unhandled 'error' event") => Context = context;
 }
@@ -80,6 +82,12 @@ public class NodeEventEmitter
         }
         return this;
     }
+
+    public NodeEventEmitter On(string eventName, NodeEventListener listener) => On(NodeEventKey.String(eventName), listener);
+    public NodeEventEmitter Once(string eventName, NodeEventListener listener) => Once(NodeEventKey.String(eventName), listener);
+    public NodeEventEmitter RemoveListener(string eventName, NodeEventListener listener) => RemoveListener(NodeEventKey.String(eventName), listener);
+    public int ListenerCount(string eventName) => ListenerCount(NodeEventKey.String(eventName));
+    public bool Emit(string eventName, params JsValue[] args) => Emit(NodeEventKey.String(eventName), args);
 
     public int ListenerCount(NodeEventKey eventName) => listeners.TryGetValue(eventName, out var list) ? list.Count : 0;
 
