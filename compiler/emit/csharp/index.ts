@@ -17,9 +17,12 @@ function number(value: number): string {
   if (Object.is(value, -0)) return '-0.0d';
   return `${value}d`;
 }
-const calls = new Set(['JsValue.IsTruthy', 'JsOperators.Add', 'JsOperators.StrictEquals', 'JsReference.Assign', 'JsConsole.Log', 'string.Concat',
-  'JsObject.Create', 'JsObject.DefineDataProperty', 'JsObject.GetProperty', 'JsObject.SetProperty', 'JsObject.HasOwn',
-  'JsArray.Create', 'JsArray.DefineElement', 'JsArray.Length', 'JsArray.Push']);
+const calls = new Set(['JsValue.IsTruthy', 'JsOperators.Add', 'JsOperators.StrictEquals', 'JsReference.Assign',
+  'JsReference.AddAssign', 'JsReference.SubtractAssignNumber', 'JsReference.MultiplyAssignNumber',
+  'JsReference.DivideAssignNumber', 'JsReference.RemainderAssignNumber', 'JsReference.PrefixIncrementNumber',
+  'JsReference.PostfixIncrementNumber', 'JsReference.PrefixDecrementNumber', 'JsReference.PostfixDecrementNumber',
+  'JsConsole.Log', 'string.Concat', 'JsObject.Create', 'JsObject.DefineDataProperty', 'JsObject.GetProperty',
+  'JsObject.SetProperty', 'JsObject.HasOwn', 'JsArray.Create', 'JsArray.DefineElement', 'JsArray.Length', 'JsArray.Push']);
 function expr(e: CsExpr): string {
   switch (e.kind) {
     case 'literal': return e.repr === 'number' ? number(e.value) : e.repr === 'string' ? quote(e.value) : String(e.value);
@@ -51,10 +54,17 @@ export function emitCSharp(program: CsProgram): string {
       case 'variable': line(d, `JsValue ${ident(s.name)} = ${expr(s.initializer)};`); return;
       case 'expression': line(d, `_ = ${expr(s.expression)};`); return;
       case 'return': line(d, `return ${expr(s.value)};`); return;
+      case 'break': line(d, 'break;'); return;
+      case 'continue': line(d, 'continue;'); return;
       case 'block': block(s, d); return;
       case 'if':
         line(d, `if (${expr(s.condition)})`); block(s.then, d);
         if (s.otherwise) { line(d, 'else'); block(s.otherwise, d); } return;
+      case 'while': line(d, `while (${expr(s.condition)})`); block(s.body, d); return;
+      case 'doWhile': line(d, 'do'); block(s.body, d); line(d, `while (${expr(s.condition)});`); return;
+      case 'for':
+        line(d, `for (; ${s.condition ? expr(s.condition) : ''}; ${s.update ? `_ = ${expr(s.update)}` : ''})`);
+        block(s.body, d); return;
     }
   }
   line(1, 'private static void Main()'); line(1, '{'); body(program.body, 2); line(1, '}');
