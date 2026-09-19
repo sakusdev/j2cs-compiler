@@ -124,6 +124,12 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           case 'helper.add': return call('JsOperators.Add', [left, right]);
           case 'helper.strictEquals': return box(call('JsOperators.StrictEquals', [left, right], 'boolean'));
           case 'helper.strictNotEquals': return box({ kind: 'unary', repr: 'boolean', op: '!', value: call('JsOperators.StrictEquals', [left, right], 'boolean') });
+          case 'helper.looseEquals': return box(call('JsOperators.LooseEquals', [left, right], 'boolean'));
+          case 'helper.looseNotEquals': return box({ kind: 'unary', repr: 'boolean', op: '!', value: call('JsOperators.LooseEquals', [left, right], 'boolean') });
+          case 'helper.lessThan': return box(call('JsOperators.LessThan', [left, right], 'boolean'));
+          case 'helper.lessThanOrEqual': return box(call('JsOperators.LessThanOrEqual', [left, right], 'boolean'));
+          case 'helper.greaterThan': return box(call('JsOperators.GreaterThan', [left, right], 'boolean'));
+          case 'helper.greaterThanOrEqual': return box(call('JsOperators.GreaterThanOrEqual', [left, right], 'boolean'));
           default: return fail('E_LOWERING', `Unimplemented binary lowering ${op}.`, e.span);
         }
       }
@@ -132,6 +138,7 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
         if (op === 'unary.number') return box({ kind: 'unary', repr: 'number', op: '-', value: unbox(operand, 'number') });
         if (op === 'unary.boolean') return box({ kind: 'unary', repr: 'boolean', op: '!', value: unbox(operand, 'boolean') });
         if (op === 'helper.not') return box({ kind: 'unary', repr: 'boolean', op: '!', value: call('JsValue.IsTruthy', [operand], 'boolean') });
+        if (op === 'helper.toNumber') return box(call('JsCoercion.ToNumberPrimitive', [operand], 'number'));
         return fail('E_LOWERING', `Unimplemented unary lowering ${op}.`, e.span);
       }
       case 'call':
@@ -149,8 +156,30 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           if (op !== 'object.hasOwn') fail('E_LOWERING', 'Object.hasOwn adapter has no implementation.', e.span);
           return box(call('JsObject.HasOwn', [expression(e.receiver), stringLiteral(e.property)], 'boolean'));
         }
-        select({ kind: 'call.function' }, facts, e.span);
-        return call(`F${e.target}`, e.args.map(expression));
+        if (typeof e.target === 'number') {
+          select({ kind: 'call.function' }, facts, e.span);
+          return call(`F${e.target}`, e.args.map(expression));
+        }
+        const op = select({ kind: 'call.intrinsic', intrinsic: e.target }, facts, e.span);
+        const args = e.args.map(expression);
+        switch (op) {
+          case 'intrinsic.isFinite.number': return box(call('double.IsFinite', [unbox(args[0]!, 'number')], 'boolean'));
+          case 'helper.isFinite.primitive': return box(call('JsGlobals.IsFinitePrimitive', [args[0]!], 'boolean'));
+          case 'intrinsic.isNaN.number': return box(call('double.IsNaN', [unbox(args[0]!, 'number')], 'boolean'));
+          case 'helper.isNaN.primitive': return box(call('JsGlobals.IsNaNPrimitive', [args[0]!], 'boolean'));
+          case 'helper.parseFloat.string': return box(call('JsNumber.ParseFloatPrimitive', [unbox(args[0]!, 'string')], 'number'));
+          case 'helper.parseFloat.primitive': return box(call('JsGlobals.ParseFloatPrimitive', [args[0]!], 'number'));
+          case 'helper.parseInt.stringDefault':
+            return box(call('JsNumber.ParseIntPrimitive', [unbox(args[0]!, 'string'), { kind: 'literal', repr: 'number', value: 0 }], 'number'));
+          case 'helper.parseInt.stringKnownRadix':
+            return box(call('JsNumber.ParseIntPrimitive', [unbox(args[0]!, 'string'),
+              call('JsCoercion.ToInt32Primitive', [args[1]!], 'number')], 'number'));
+          case 'helper.parseInt.primitive': {
+            const radix = args[1] ?? box({ kind: 'literal', repr: 'number', value: 0 });
+            return box(call('JsGlobals.ParseIntPrimitive', [args[0]!, radix], 'number'));
+          }
+          default: return fail('E_LOWERING', `Unimplemented intrinsic lowering ${op}.`, e.span);
+        }
     }
   }
   function condition(e: SE): CE {

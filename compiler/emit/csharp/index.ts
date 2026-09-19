@@ -17,7 +17,11 @@ function number(value: number): string {
   if (Object.is(value, -0)) return '-0.0d';
   return `${value}d`;
 }
-const calls = new Set(['JsValue.IsTruthy', 'JsOperators.Add', 'JsOperators.StrictEquals', 'JsReference.Assign',
+const calls = new Set(['JsValue.IsTruthy', 'JsOperators.Add', 'JsOperators.StrictEquals', 'JsOperators.LooseEquals',
+  'JsOperators.LessThan', 'JsOperators.LessThanOrEqual', 'JsOperators.GreaterThan', 'JsOperators.GreaterThanOrEqual',
+  'JsCoercion.ToNumberPrimitive', 'JsCoercion.ToInt32Primitive', 'JsGlobals.IsFinitePrimitive', 'JsGlobals.IsNaNPrimitive',
+  'JsGlobals.ParseFloatPrimitive', 'JsGlobals.ParseIntPrimitive', 'JsNumber.ParseFloatPrimitive', 'JsNumber.ParseIntPrimitive',
+  'double.IsFinite', 'double.IsNaN', 'JsReference.Assign',
   'JsReference.AddAssign', 'JsReference.SubtractAssignNumber', 'JsReference.MultiplyAssignNumber',
   'JsReference.DivideAssignNumber', 'JsReference.RemainderAssignNumber', 'JsReference.PrefixIncrementNumber',
   'JsReference.PostfixIncrementNumber', 'JsReference.PrefixDecrementNumber', 'JsReference.PostfixDecrementNumber',

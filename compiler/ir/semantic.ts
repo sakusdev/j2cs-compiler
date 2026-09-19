@@ -15,7 +15,7 @@ export type SemanticExpr = Node & Typed & (
   | { kind: 'member'; object: SemanticExpr; property: string }
   | { kind: 'object'; properties: { key: string; value: SemanticExpr }[] }
   | { kind: 'array'; elements: (SemanticExpr | null)[] }
-  | { kind: 'call'; target: 'console' | number; args: SemanticExpr[]; binding: Binding; arity: number }
+  | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt' | number; args: SemanticExpr[]; binding: Binding; arity: number }
   | { kind: 'call'; target: 'array.push'; receiver: SemanticExpr; args: SemanticExpr[]; arity: number }
   | { kind: 'call'; target: 'object.hasOwn'; receiver: SemanticExpr; property: string; binding: Binding; args: []; arity: 2 }
 );
