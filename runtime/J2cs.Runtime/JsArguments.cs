@@ -25,4 +25,13 @@ public sealed class JsArguments
     }
 
     public static double Length(JsArguments arguments) => arguments.values.Length;
+
+    public static JsValue Rest(JsArguments arguments, double start)
+        => BuildRest(arguments, (int)start);
+
+    private static JsValue BuildRest(JsArguments arguments, int start)
+    {
+        var result = JsArray.Create(Math.Max(0, arguments.values.Length - start));
+        return result;
+    }
 }
