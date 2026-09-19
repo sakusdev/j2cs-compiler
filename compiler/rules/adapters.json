@@ -256,7 +256,7 @@
     },
     {
       "ruleId": "function.call.extra-arguments",
-      "sha256": "63e162d81ec90d445711de6ce2c474035a8309bbf8e90780526a67bfad3ea1b3d",
+      "sha256": "63e162d81ec90d445711de6ce2c474035a8309bbf8e90780526a67bfad3ea1b3",
       "selector": {
         "kind": "call.function.extra"
       },
