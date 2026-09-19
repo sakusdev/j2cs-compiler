@@ -8,8 +8,8 @@ export interface Bindings {
   references: Map<number, Binding>; declarations: Map<number, Binding>; functions: Binding[];
 }
 interface Scope { parent?: Scope; owner: number; names: Map<string, Binding> }
-const intrinsics = ['undefined', 'NaN', 'Infinity', 'console', 'Object', 'isFinite', 'isNaN', 'parseFloat', 'parseInt'];
-const callableIntrinsics = new Set(['isFinite', 'isNaN', 'parseFloat', 'parseInt']);
+const intrinsics = ['undefined', 'NaN', 'Infinity', 'console', 'Object', 'isFinite', 'isNaN', 'parseFloat', 'parseInt', 'queueMicrotask'];
+const callableIntrinsics = new Set(['isFinite', 'isNaN', 'parseFloat', 'parseInt', 'queueMicrotask']);
 export function resolveBindings(program: Program): Bindings {
   let nextId = 0;
   const references = new Map<number, Binding>(), declarations = new Map<number, Binding>(), functions: Binding[] = [];
@@ -36,12 +36,15 @@ export function resolveBindings(program: Program): Bindings {
     if (b.kind !== 'let' && b.kind !== 'parameter') fail('E_IMMUTABLE_WRITE', `Assignment to '${b.name}' is unsupported (${b.kind}).`, span);
     return b;
   }
-  function expr(n: Expr, s: Scope, use: 'value' | 'callee' | 'receiver' = 'value'): void {
+  function expr(n: Expr, s: Scope, use: 'value' | 'callee' | 'receiver' | 'callback' = 'value'): void {
     switch (n.kind) {
       case 'literal': return;
       case 'identifier': {
         const b = resolve(n, s);
-        if (b.kind === 'function' && use !== 'callee') fail('E_FUNCTION_VALUE', 'Function identity/escape is unsupported; use a direct call.', n.span);
+        if (b.kind === 'function' && use !== 'callee' && use !== 'callback')
+          fail('E_FUNCTION_VALUE', 'Function identity/escape is unsupported; use a direct call.', n.span);
+        if (use === 'callback' && b.kind !== 'function')
+          fail('E_MICROTASK_CALLBACK', 'queueMicrotask currently requires a statically resolved function declaration callback.', n.span);
         if (b.kind === 'intrinsic' && ['console', 'Object'].includes(b.name) && use !== 'receiver')
           fail('E_INTRINSIC_ESCAPE', `${b.name} may only be used as the direct receiver of a supported intrinsic call.`, n.span);
         if (b.kind === 'intrinsic' && callableIntrinsics.has(b.name) && use !== 'callee')
@@ -66,7 +69,21 @@ export function resolveBindings(program: Program): Bindings {
       case 'compound': writable(n.target, s, n.span); expr(n.value, s); return;
       case 'update': writable(n.target, s, n.span); return;
       case 'member': expr(n.object, s, 'receiver'); return;
-      case 'call': expr(n.callee, s, 'callee'); n.args.forEach(a => expr(a, s)); return;
+      case 'call': {
+        expr(n.callee, s, 'callee');
+        if (n.callee.kind === 'identifier') {
+          const callee = references.get(n.callee.id)!;
+          if (callee.kind === 'intrinsic' && callee.name === 'queueMicrotask') {
+            if (n.args.length !== 1 || n.args[0]!.kind !== 'identifier')
+              fail('E_MICROTASK_CALLBACK',
+                'queueMicrotask currently requires exactly one statically resolved function declaration callback.', n.span);
+            expr(n.args[0]!, s, 'callback');
+            return;
+          }
+        }
+        n.args.forEach(a => expr(a, s)); return;
+      }
+      case 'await': expr(n.operand, s); return;
     }
   }
   function body(nodes: Statement[], s: Scope, top = false, loopDepth = 0): void {
