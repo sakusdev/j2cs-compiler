@@ -142,6 +142,7 @@ public sealed class NodeTcpSocket : IAsyncDisposable
             try
             {
                 await client.ConnectAsync(host, port, lifetime.Token).ConfigureAwait(false);
+                connecting = false;
                 onConnect?.Invoke(this);
             }
             catch (SocketException error)
