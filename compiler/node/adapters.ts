@@ -54,7 +54,7 @@ export const NODE_COMPAT_ADAPTERS: readonly NodeCompatAdapter[] = [
   { ruleId: 'binary.buffer.from', sha256: 'd659b88ab766c3aff57f1afc3a21ae9e8d057c617572aa04a978e35f685cd040', helper: 'NodeBuffer.From' },
   { ruleId: 'binary.buffer.alloc', sha256: 'd3c73cc08f689cc9fc51b41e4b02a6e37972ce951ec9559a26a94c0c6488775e', helper: 'NodeBuffer.Alloc' },
   { ruleId: 'binary.buffer.byte-length', sha256: 'fb9725b22158a08ad5355bb223622253321bc6473a3e725bdf0636a13b2a3f11', helper: 'NodeBuffer.ByteLength' },
-  { ruleId: 'binary.buffer.view', sha256: 'da2797e6e0f19aded9da0a3d6896058806b60e52644ee7aa21bea54fe501f718', helper: 'NodeBuffer.View' },
+  { ruleId: 'binary.buffer.view', sha256: 'da2797e6e0f19aded9da0a3d6896058806b60e52644ee7aa21bea54fe501f718', helper: 'NodeBuffer.View', requires: [bufferViewOnly, bufferMetadataUnobserved] },
 ];
 
 function nodeRequirement(key: string, value: unknown): Predicate {
