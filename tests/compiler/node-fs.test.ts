@@ -23,6 +23,7 @@ test('sync fs rules require intrinsic module identity and representable options'
     moduleBinding: 'node:fs builtin',
     bindingKind: 'intrinsic',
     optionsRepresentable: true,
+    pathKind: 'string',
   });
   assert.equal(read.verdict, 'proven');
   assert.equal(read.helper, 'NodeFs.ReadFileSync');
@@ -31,18 +32,22 @@ test('sync fs rules require intrinsic module identity and representable options'
     moduleBinding: 'node:fs builtin',
     bindingKind: 'lexical',
     optionsRepresentable: true,
+    pathKind: 'string',
   });
   assert.equal(shadowed.verdict, 'disproven');
 
   const unknownOptions = proveNodeFsRule(database, 'writeFileSync', {
     moduleBinding: 'node:fs builtin',
     bindingKind: 'intrinsic',
+    pathKind: 'string',
+    dataKind: 'string',
   });
   assert.equal(unknownOptions.verdict, 'unknown');
 
   const wrongModule = proveNodeFsRule(database, 'existsSync', {
     moduleBinding: 'node:fs/promises builtin',
     bindingKind: 'intrinsic',
+    pathKind: 'string',
   });
   assert.equal(wrongModule.verdict, 'disproven');
 });
@@ -52,6 +57,8 @@ test('fs.promises proof remains closed until await and JS scheduler facts are ex
     moduleBinding: 'node:fs/promises builtin',
     bindingKind: 'intrinsic',
     directlyAwaited: true,
+    optionsRepresentable: true,
+    pathKind: 'string',
   });
   assert.equal(missingScheduler.verdict, 'unknown');
 
@@ -60,6 +67,9 @@ test('fs.promises proof remains closed until await and JS scheduler facts are ex
     bindingKind: 'intrinsic',
     directlyAwaited: true,
     promiseSchedulerCompatible: false,
+    optionsRepresentable: true,
+    pathKind: 'string',
+    dataKind: 'string',
   });
   assert.equal(incompatible.verdict, 'disproven');
 
@@ -68,7 +78,16 @@ test('fs.promises proof remains closed until await and JS scheduler facts are ex
     bindingKind: 'intrinsic',
     directlyAwaited: true,
     promiseSchedulerCompatible: true,
+    optionsRepresentable: true,
+    pathKind: 'string',
   });
   assert.equal(proven.verdict, 'proven');
   assert.equal(proven.helper, 'NodeFsPromises.ReadFileAsync');
+
+  const unsupportedPath = proveNodeFsRule(database, 'existsSync', {
+    moduleBinding: 'node:fs builtin',
+    bindingKind: 'intrinsic',
+    pathKind: 'other',
+  });
+  assert.equal(unsupportedPath.verdict, 'disproven');
 });
