@@ -95,6 +95,7 @@ export interface ElectronDesktopProofContext {
   readonly appReady?: boolean;
   readonly electronProfile?: string;
   readonly hostCapability?: boolean;
+  readonly argumentsRepresentable?: boolean;
 }
 
 export interface ElectronDesktopRuleProof {
@@ -149,6 +150,13 @@ function contextFacts(context: ElectronDesktopProofContext): Facts {
   if (context.hostCapability !== undefined) {
     facts.prove('electron.desktop.hostCapability', context.hostCapability, 'desktop platform adapter capability');
   }
+  if (context.argumentsRepresentable !== undefined) {
+    facts.prove(
+      'electron.desktop.argumentsRepresentable',
+      context.argumentsRepresentable,
+      'bounded desktop helper argument-shape analysis',
+    );
+  }
   return facts;
 }
 
@@ -191,7 +199,10 @@ export function proveElectronDesktopRule(
   const facts = contextFacts(context);
   const canonical = Object.entries(loaded.rule.source.requirements ?? {})
     .map(([key, value]) => requirementPredicate(key, value));
-  const backend: Predicate[] = [{ fact: 'electron.desktop.hostCapability', equals: true }];
+  const backend: Predicate[] = [
+    { fact: 'electron.desktop.hostCapability', equals: true },
+    { fact: 'electron.desktop.argumentsRepresentable', equals: true },
+  ];
   const checks = [...canonical, ...backend].map(predicate => evaluate(predicate, facts));
   return { ruleId: spec.ruleId, helper: spec.helper, verdict: aggregate(checks), checks, facts };
 }
