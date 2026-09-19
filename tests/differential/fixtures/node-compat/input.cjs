@@ -21,6 +21,8 @@ console.log(buffer.toString('utf8'), view.toString('hex'), Buffer.byteLength('é
 const copy = Buffer.from(buffer);
 copy[0] = 0x7a;
 console.log(buffer[0], copy[0]);
+console.log(Buffer.from([257, -1, 3.9]).toString('hex'));
+console.log(Buffer.byteLength('é', 'not-an-encoding'));
 const arrayBuffer = new ArrayBuffer(3);
 const bytes = new Uint8Array(arrayBuffer);
 bytes.set([1, 2, 3]);
