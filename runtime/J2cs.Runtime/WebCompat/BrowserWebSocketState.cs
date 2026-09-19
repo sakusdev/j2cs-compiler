@@ -13,10 +13,16 @@ public sealed class BrowserWebSocketState
     private long sequence;
 
     public BrowserWebSocketState(string url, IEnumerable<string>? protocols = null, WebSocketHostProfile? hostProfile = null)
+        : this(url, null, protocols, hostProfile, true) { }
+
+    public BrowserWebSocketState(string url, Uri baseUrl, IEnumerable<string>? protocols = null, WebSocketHostProfile? hostProfile = null)
+        : this(url, baseUrl ?? throw new ArgumentNullException(nameof(baseUrl)), protocols, hostProfile, true) { }
+
+    private BrowserWebSocketState(string url, Uri? baseUrl, IEnumerable<string>? protocols, WebSocketHostProfile? hostProfile, bool _)
     {
         HostProfile = hostProfile ?? WebSocketHostProfile.Browser;
         HostProfile.RequireBrowserSemantics();
-        Url = NormalizeUrl(url);
+        Url = NormalizeUrl(url, baseUrl);
         Protocols = ValidateProtocols(protocols ?? Array.Empty<string>());
         ReadyState = BrowserWebSocketReadyState.Connecting;
         AddTrace(WebSocketTraceKind.Constructed, Url.AbsoluteUri);
@@ -119,11 +125,15 @@ public sealed class BrowserWebSocketState
         }
     }
 
-    private static Uri NormalizeUrl(string raw)
+    private static Uri NormalizeUrl(string raw, Uri? baseUrl)
     {
         ArgumentNullException.ThrowIfNull(raw);
-        if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri))
-            throw new WebSocketContractException("SyntaxError", "WebSocket URL must be absolute.");
+        Uri? uri;
+        if (!Uri.TryCreate(raw, UriKind.Absolute, out uri))
+        {
+            if (baseUrl is null || !baseUrl.IsAbsoluteUri || !Uri.TryCreate(baseUrl, raw, out uri))
+                throw new WebSocketContractException("SyntaxError", "Relative WebSocket URL requires a relevant-settings-object base URL.");
+        }
         if (!string.IsNullOrEmpty(uri.Fragment))
             throw new WebSocketContractException("SyntaxError", "WebSocket URL fragments are forbidden.");
 
