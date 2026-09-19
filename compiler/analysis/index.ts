@@ -1,8 +1,8 @@
 import { fail } from '../diagnostics/index.js';
 import type { Expr, Node, Program, Statement } from '../parser/ast.js';
-import type { SemanticExpr as SE, SemanticForInitializer, SemanticFunction, SemanticProgram, SemanticStatement as SS } from '../ir/semantic.js';
+import type { BuiltinMethodTarget, SemanticExpr as SE, SemanticForInitializer, SemanticFunction, SemanticProgram, SemanticStatement as SS } from '../ir/semantic.js';
 import { type Binding, type Bindings } from './bindings.js';
-import { exactly, hasReference, literalType, union, type TypeSet } from './facts.js';
+import { exactly, hasReference, isPrimitiveSet, literalType, union, type TypeSet } from './facts.js';
 
 interface ValueInfo { types: TypeSet; refs?: readonly number[] }
 interface Shape { kind: 'Object' | 'Array'; properties: Map<string, ValueInfo>; length?: number }
@@ -19,6 +19,13 @@ const arrayPrototypeKeys = new Set(['at', 'concat', 'copyWithin', 'entries', 'ev
   'findIndex', 'findLast', 'findLastIndex', 'flat', 'flatMap', 'forEach', 'includes', 'indexOf', 'join', 'keys',
   'lastIndexOf', 'map', 'pop', 'push', 'reduce', 'reduceRight', 'reverse', 'shift', 'slice', 'some', 'sort',
   'splice', 'toLocaleString', 'toReversed', 'toSorted', 'toSpliced', 'toString', 'unshift', 'values', 'with']);
+const arrayBuiltinTargets: Readonly<Record<string, BuiltinMethodTarget>> = {
+  push: 'array.push', at: 'array.at', includes: 'array.includes', indexOf: 'array.indexOf', pop: 'array.pop',
+};
+const stringBuiltinTargets: Readonly<Record<string, BuiltinMethodTarget>> = {
+  at: 'string.at', charAt: 'string.charAt', includes: 'string.includes', indexOf: 'string.indexOf',
+  slice: 'string.slice', substring: 'string.substring',
+};
 
 export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   const instances: SemanticFunction[] = [], cache = new Map<string, SemanticFunction>(), active = new Set<number>();
@@ -142,6 +149,23 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
     }
   }
+  function arrayValueSummary(refs: readonly number[], f: Flow): ValueInfo {
+    const values: ValueInfo[] = [UNDEFINED];
+    for (const ref of refs) {
+      const shape = f.heap.get(ref)!;
+      for (const [key, value] of shape.properties) {
+        if (!/^(?:0|[1-9]\d*)$/.test(key)) continue;
+        const index = Number(key);
+        if (Number.isSafeInteger(index) && index >= 0 && index <= 0xffff_fffe)
+          values.push(value);
+      }
+    }
+    return unionValue(...values);
+  }
+  function requirePrimitiveCoercion(value: SE, operation: string): void {
+    if (!isPrimitiveSet(value.types))
+      fail('E_BUILTIN_COERCION', `${operation} currently requires primitive coercion inputs; object ToPrimitive is fail-closed.`, value.span);
+  }
   function instantiate(b: Binding, args: SE[], callNode: Node): SemanticFunction {
     const fn = b.function!;
     if (args.length !== fn.params.length) fail('E_ARITY', 'Only exact-arity direct function calls are supported.', callNode.span);
@@ -225,6 +249,10 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
       case 'member': {
         const object = expression(n.object, f);
+        if (exactly(object.types, 'String')) {
+          if (n.property === 'length') return { ...n, object, types: ['Number'] };
+          return fail('E_PROTOTYPE_PROPERTY', `String property '${n.property}' is only supported as a reviewed direct builtin call.`, n.span);
+        }
         const refs = requireReference(object, f, 'Property read');
         if (n.property === 'length' && refs.every(r => f.heap.get(r)!.kind === 'Array'))
           return { ...n, object, types: ['Number'] };
@@ -257,22 +285,74 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
                 property: typeof key.value === 'number' ? String(key.value) : key.value, args: [], arity: 2, types: ['Boolean'] };
             }
           }
-          if (n.callee.property === 'push') {
-            const receiver = expression(n.callee.object, f), refs = requireReference(receiver, f, 'Array.prototype.push');
-            if (!exactly(receiver.types, 'Array') || refs.some(r => f.heap.get(r)!.kind !== 'Array'))
-              fail('E_ARRAY_RECEIVER', 'push requires a proven builtin Array receiver.', n.span);
-            if (refs.some(r => f.heap.get(r)!.properties.has('push')))
-              fail('E_ARRAY_METHOD_OVERRIDDEN', 'An own push property makes builtin Array.prototype.push resolution unproven.', n.span);
+          const receiver = expression(n.callee.object, f);
+          if (exactly(receiver.types, 'Array')) {
+            const target = arrayBuiltinTargets[n.callee.property];
+            if (!target) fail('E_INDIRECT_CALL', `Array member call '.${n.callee.property}' is not a reviewed builtin.`, n.span);
+            const refs = requireReference(receiver, f, `Array.prototype.${n.callee.property}`);
+            if (refs.some(r => f.heap.get(r)!.kind !== 'Array'))
+              fail('E_ARRAY_RECEIVER', `${n.callee.property} requires a proven builtin Array receiver.`, n.span);
+            if (refs.some(r => f.heap.get(r)!.properties.has(n.callee.property)))
+              fail('E_ARRAY_METHOD_OVERRIDDEN', `An own ${n.callee.property} property makes builtin Array.prototype resolution unproven.`, n.span);
             const args = n.args.map(a => expression(a, f));
-            for (const ref of refs) {
-              const shape = f.heap.get(ref)!;
-              if (shape.length !== undefined) {
-                let index = shape.length;
-                for (const arg of args) shape.properties.set(String(index++), valueOf(arg));
-                shape.length = index;
+
+            if (target === 'array.push') {
+              for (const ref of refs) {
+                const shape = f.heap.get(ref)!;
+                if (shape.length !== undefined) {
+                  let index = shape.length;
+                  for (const arg of args) shape.properties.set(String(index++), valueOf(arg));
+                  shape.length = index;
+                }
               }
+              return { ...n, kind: 'call', target, receiver, args, arity: args.length, types: ['Number'] };
             }
-            return { ...n, kind: 'call', target: 'array.push', receiver, args, arity: args.length, types: ['Number'] };
+            if (target === 'array.at') {
+              if (args.length !== 1) fail('E_ARITY', 'Array.prototype.at is currently supported with exactly one argument.', n.span);
+              requirePrimitiveCoercion(args[0]!, 'Array.prototype.at index');
+              return withValue({ ...n, kind: 'call' as const, target, receiver, args, arity: args.length }, arrayValueSummary(refs, f));
+            }
+            if (target === 'array.includes' || target === 'array.indexOf') {
+              if (args.length < 1 || args.length > 2)
+                fail('E_ARITY', `Array.prototype.${n.callee.property} is currently supported with one or two arguments.`, n.span);
+              if (args[1]) requirePrimitiveCoercion(args[1], `Array.prototype.${n.callee.property} fromIndex`);
+              return { ...n, kind: 'call', target, receiver, args, arity: args.length,
+                types: target === 'array.includes' ? ['Boolean'] : ['Number'] };
+            }
+            if (target === 'array.pop') {
+              if (args.length !== 0) fail('E_ARITY', 'Array.prototype.pop is currently supported with no arguments.', n.span);
+              const values: ValueInfo[] = [];
+              for (const ref of refs) {
+                const shape = f.heap.get(ref)!;
+                if (shape.length === undefined)
+                  fail('E_ARRAY_LENGTH_FLOW', 'Array.prototype.pop requires a statically tracked length across control-flow joins.', n.span);
+                if (shape.length === 0) values.push(UNDEFINED);
+                else {
+                  const key = String(shape.length - 1);
+                  values.push(shape.properties.get(key) ?? UNDEFINED);
+                  shape.properties.delete(key);
+                  shape.length--;
+                }
+              }
+              return withValue({ ...n, kind: 'call' as const, target, receiver, args, arity: 0 }, unionValue(...values));
+            }
+          }
+          if (exactly(receiver.types, 'String')) {
+            const target = stringBuiltinTargets[n.callee.property];
+            if (!target) fail('E_INDIRECT_CALL', `String member call '.${n.callee.property}' is not a reviewed builtin.`, n.span);
+            const args = n.args.map(a => expression(a, f));
+            for (const arg of args) requirePrimitiveCoercion(arg, `String.prototype.${n.callee.property} argument`);
+            const range = target === 'string.includes' || target === 'string.indexOf' || target === 'string.slice' || target === 'string.substring';
+            const exactOne = target === 'string.at' || target === 'string.charAt';
+            if (exactOne && args.length !== 1)
+              fail('E_ARITY', `String.prototype.${n.callee.property} is currently supported with exactly one argument.`, n.span);
+            if (range && (args.length < 1 || args.length > 2))
+              fail('E_ARITY', `String.prototype.${n.callee.property} is currently supported with one or two arguments.`, n.span);
+            const types: TypeSet =
+              target === 'string.at' ? ['String', 'Undefined'] :
+              target === 'string.includes' ? ['Boolean'] :
+              target === 'string.indexOf' ? ['Number'] : ['String'];
+            return { ...n, kind: 'call', target, receiver, args, arity: args.length, types };
           }
           fail('E_INDIRECT_CALL', `Member call '.${n.callee.property}' is not a proven supported intrinsic.`, n.span);
         }
