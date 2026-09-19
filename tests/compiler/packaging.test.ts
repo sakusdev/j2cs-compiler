@@ -10,8 +10,10 @@ import {
   planPackage,
   type PackagingRequest,
 } from '../../compiler/packaging/index.js';
+import { loadRules } from '../../compiler/rules/loader.js';
 import {
   loadPackagingRuleProofs,
+  provePackagingRuleContracts,
   PACKAGING_RULE_DB_COMMIT,
   PACKAGING_RULE_IDS,
 } from '../../compiler/packaging/rules.js';
@@ -46,6 +48,14 @@ test('packaging proof manifest is tied to the same pinned j2cs commit as compile
   const proofs = await loadPackagingRuleProofs(ruleDb);
   assert.deepEqual(proofs.map(proof => proof.ruleId), [...PACKAGING_RULE_IDS]);
   assert.ok(proofs.every(proof => /^[0-9a-f]{64}$/.test(proof.sha256)));
+});
+
+test('packaging rule proof fails closed when canonical content fingerprint changes', async () => {
+  const database = await loadRules(ruleDb);
+  const loaded = database.byId.get('electron.autoupdater.platform-support');
+  assert.ok(loaded);
+  loaded.sha256 = '0'.repeat(64);
+  assert.throws(() => provePackagingRuleContracts(database), /changed content/);
 });
 
 test('Windows MSIX plan maps managed, Electron resource and native payloads deterministically', async () => {
