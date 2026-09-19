@@ -61,3 +61,18 @@ test('static method replacement invalidates direct-method proof', () => {
   `, index, 'replace.js'), error =>
     error instanceof CompileError && error.diagnostic.code === 'E_CLASS_METHOD_REPLACEMENT');
 });
+
+
+test('class evaluation order rejects TDZ reads before declaration', () => {
+  assert.throws(() => compile('console.log(C.x); class C { static x = 1; }', index, 'tdz.js'), error =>
+    error instanceof CompileError && error.diagnostic.code === 'E_CLASS_TDZ');
+});
+
+test('static super is recognized then deferred to constructor-object super semantics', () => {
+  assert.throws(() => compile(
+    'class A { static x = 1; } class B extends A { static read(){ return super.x; } }',
+    index, 'super-static.js'), error =>
+    error instanceof CompileError
+      && error.diagnostic.code === 'E_CLASS_DEPENDENCY'
+      && JSON.stringify(error.diagnostic.details).includes('classes.super.static_property'));
+});
