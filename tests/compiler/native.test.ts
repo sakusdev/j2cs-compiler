@@ -6,6 +6,7 @@ import { loadRules } from '../../compiler/rules/loader.js';
 import {
   NATIVE_CJS_RULE_ID,
   NATIVE_CJS_RULE_SHA256,
+  discoverNativeModule,
   planNativeModule,
   proveNativeModuleResolution,
   traceNativeModulePlan,
@@ -56,6 +57,51 @@ test('native planner fails closed when canonical resolver requirements are not p
     moduleSystem: 'ESM',
     specifierNotCompileTimeIntrinsic: true,
   }), /proof is not proven/);
+});
+
+
+test('native discovery requires resolver-proven kind and ABI metadata', () => {
+  const found = discoverNativeModule(database, {
+    host: 'Node.js',
+    moduleSystem: 'CommonJS',
+    specifierNotCompileTimeIntrinsic: true,
+  }, {
+    request: 'sharp',
+    resolvedPath: '/modules/sharp.node',
+    kind: 'native-addon',
+    rid: 'linux-x64',
+    abi: abi(),
+  });
+  assert.equal(found.kind, 'native-module');
+  if (found.kind === 'native-module') assert.equal(found.descriptor.format, 'node-addon');
+
+  const noAbi = discoverNativeModule(database, {
+    host: 'Node.js',
+    moduleSystem: 'CommonJS',
+    specifierNotCompileTimeIntrinsic: true,
+  }, {
+    request: 'opaque',
+    resolvedPath: '/modules/opaque.node',
+    kind: 'native-addon',
+    rid: 'linux-x64',
+  });
+  assert.equal(noAbi.kind, 'unsupported-native');
+  if (noAbi.kind === 'unsupported-native')
+    assert.equal(noAbi.diagnostic.code, 'E_NATIVE_MODULE_ABI_UNKNOWN');
+
+  const unknown = discoverNativeModule(database, {
+    host: 'Node.js',
+    moduleSystem: 'CommonJS',
+    specifierNotCompileTimeIntrinsic: true,
+  }, {
+    request: 'mystery',
+    resolvedPath: '/modules/mystery',
+    kind: 'unknown',
+    rid: 'linux-x64',
+  });
+  assert.equal(unknown.kind, 'unsupported-native');
+  if (unknown.kind === 'unsupported-native')
+    assert.equal(unknown.diagnostic.code, 'E_NATIVE_MODULE_KIND_UNKNOWN');
 });
 
 test('known adapters outrank exact wrapper and sidecar contracts', () => {
