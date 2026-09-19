@@ -45,6 +45,7 @@ const typeIs = (key: string, type: string): Predicate => ({ fact: `${key}.types`
 const both = (type: string): Predicate => ({ all: [typeIs('left', type), typeIs('right', type)] });
 const numericOperands: Predicate = { any: [both('Number'), typeIs('operand', 'Number')] };
 const sameNative: Predicate = { any: ['Number', 'String', 'Boolean'].map(both) };
+const primitiveDomain = (key: string): Predicate => eq(`${key}.domain`, 'primitive');
 const knownFlags: Record<string, Predicate> = {
   no_to_primitive_required: eq('operands.domain', 'primitive'),
   no_to_numeric_required: numericOperands,
@@ -64,6 +65,14 @@ const knownFlags: Record<string, Predicate> = {
   general_operands: eq('operands.complete', true),
   operand_may_be_non_boolean: { not: typeIs('operand', 'Boolean') },
   expression_may_be_non_boolean: { not: typeIs('operand', 'Boolean') },
+  operand_may_require_coercion: primitiveDomain('operand'),
+  operands_may_require_to_primitive_or_mixed_numeric_handling: eq('operands.domain', 'primitive'),
+  input_is_primitive: primitiveDomain('input'),
+  argument_is_primitive: primitiveDomain('argument'),
+  value_is_primitive: primitiveDomain('value'),
+  radix_to_int32_lowerable: primitiveDomain('radix'),
+  radix_coercion_lowerable: primitiveDomain('radix'),
+  radix_omitted: eq('call.radixOmitted', true),
   lhs_is_assignable_reference: eq('reference.kind', 'mutable-lexical'),
   operand_is_assignable_reference: eq('reference.kind', 'mutable-lexical'),
   target_statically_known: eq('binding.kind', 'function'),
@@ -90,6 +99,7 @@ const knownFlags: Record<string, Predicate> = {
 };
 const names: Record<string, string> = {
   left_type: 'left.type', right_type: 'right.type', operand_type: 'operand.type', static_type: 'result.type',
+  argument_static_type: 'argument.type', operator: 'operator.semantic', semantic_operation: 'operation.semantic',
   ast_node: 'ast.kind', constant_value: 'constant.value',
   identifier_resolves_to_intrinsic_global_property: 'binding.globalProperty',
   binding_resolves_to_intrinsic: 'binding.intrinsic', platform: 'profile.platform', host: 'profile.host',
@@ -99,6 +109,12 @@ const names: Record<string, string> = {
 export function legacyPredicate(key: string, value: unknown): Predicate {
   if (names[key] && ['string', 'number', 'boolean'].includes(typeof value))
     return eq(names[key]!, value as string | number | boolean);
+  const excludes: Record<string, string> = {
+    static_type_excludes: 'result.types',
+    argument_static_type_excludes: 'argument.types',
+    value_static_type_excludes: 'value.types',
+  };
+  if (excludes[key] && typeof value === 'string') return { not: { fact: excludes[key]!, contains: value } };
   if (value === true && knownFlags[key]) return knownFlags[key]!;
   return { unknown: `Unrecognized requirement ${key}=${JSON.stringify(value)}` };
 }
