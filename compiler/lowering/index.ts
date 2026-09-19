@@ -14,6 +14,7 @@ export interface LoweredProgram { ir: CsProgram; trace: Trace[]; structuralContr
 const variable = (b: Binding): string => `b${b.id}`;
 const call = (target: string, args: CE[], repr: CE['repr'] = 'value'): CE => ({ kind: 'call', target, args, repr });
 const read = (b: Binding): CE => ({ kind: 'read', repr: 'value', name: variable(b) });
+const readName = (name: string): CE => ({ kind: 'read', repr: 'value', name });
 const ref = (b: Binding): CE => ({ kind: 'ref', repr: 'value', name: variable(b) });
 const undef = (): CE => ({ kind: 'member', repr: 'value', name: 'JsUndefined.Value' });
 const stringLiteral = (value: string): CE => ({ kind: 'literal', repr: 'string', value });
@@ -60,6 +61,27 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           if (element) result = call('JsArray.DefineElement', [result, numberLiteral(i), expression(element)]);
         });
         return result;
+      }
+      case 'thisValue':
+        contracts.add('core.constructor-this-v1');
+        return readName(e.slot);
+      case 'newTarget': {
+        const op = select({ kind: 'meta.newTarget' }, facts, e.span);
+        if (op !== 'meta.newTarget') fail('E_LOWERING', 'new.target adapter has no implementation.', e.span);
+        contracts.add('core.new-target-context-v1');
+        return e.constructorTemplateId === undefined
+          ? undef()
+          : call('JsConstructor.Identity', [numberLiteral(e.constructorTemplateId)]);
+      }
+      case 'construct': {
+        const op = select({ kind: 'construct.function' }, facts, e.span);
+        if (op !== 'construct.function') fail('E_LOWERING', 'Constructor adapter has no implementation.', e.span);
+        if (e.mayReturnObject) {
+          const override = select({ kind: 'construct.returnOverride' }, facts, e.span);
+          if (override !== 'construct.returnOverride') fail('E_LOWERING', 'Constructor return-override adapter has no implementation.', e.span);
+        }
+        contracts.add('core.constructor-direct-known-v1');
+        return call(`K${e.target}`, e.args.map(expression));
       }
       case 'read':
         if (e.binding.kind !== 'intrinsic') { contracts.add('core.lexical-read'); return { kind: 'read', repr: 'value', name: variable(e.binding) }; }
@@ -214,9 +236,30 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
         return { kind: 'return', value: expression(s.value) };
     }
   }
-  const functions = program.functions.map(fn => {
-    select({ kind: 'function' }, declarationFacts(fn), fn.span);
-    return { name: `F${fn.instanceId}`, params: fn.params.map(variable), body: fn.body.map(statement) };
+  const functions = program.functions.flatMap(fn => {
+    const hasInvocationMeta = fn.usedWithNew || fn.observes.includes('this') || fn.observes.includes('new.target');
+    if (hasInvocationMeta) contracts.add('core.function-invocation-context-specialization-v1');
+    else select({ kind: 'function' }, declarationFacts(fn), fn.span);
+    const bodyFunction = {
+      name: `F${fn.instanceId}`,
+      params: [...(fn.thisSlot ? [fn.thisSlot] : []), ...fn.params.map(variable)],
+      body: fn.body.map(statement),
+    };
+    if (fn.mode !== 'construct') return [bodyFunction];
+    const receiver = fn.thisSlot!;
+    const result = `r${fn.instanceId}`;
+    const wrapper = {
+      name: `K${fn.instanceId}`,
+      params: fn.params.map(variable),
+      body: [
+        { kind: 'variable' as const, name: receiver,
+          initializer: call('JsConstructor.CreateReceiver', [numberLiteral(fn.constructorTemplateId!)]) },
+        { kind: 'variable' as const, name: result,
+          initializer: call(`F${fn.instanceId}`, [readName(receiver), ...fn.params.map(p => readName(variable(p)))]) },
+        { kind: 'return' as const, value: call('JsConstructor.SelectResult', [readName(receiver), readName(result)]) },
+      ],
+    };
+    return [bodyFunction, wrapper];
   });
   return { ir: { functions, body: program.body.map(statement) }, trace, structuralContracts: [...contracts].sort() };
 }
