@@ -31,6 +31,8 @@ export interface NodeFsProofContext {
   optionsRepresentable?: boolean;
   directlyAwaited?: boolean;
   promiseSchedulerCompatible?: boolean;
+  pathKind?: 'string' | 'other';
+  dataKind?: 'string' | 'buffer' | 'other';
 }
 
 export interface NodeFsRuleProof {
@@ -53,6 +55,10 @@ function contextFacts(context: NodeFsProofContext): Facts {
     facts.prove('node.promise.directlyAwaited', context.directlyAwaited, 'await-use analysis');
   if (context.promiseSchedulerCompatible !== undefined)
     facts.prove('node.promise.schedulerCompatible', context.promiseSchedulerCompatible, 'Promise scheduler capability');
+  if (context.pathKind !== undefined)
+    facts.prove('node.fs.pathKind', context.pathKind, 'bounded Node fs path analysis');
+  if (context.dataKind !== undefined)
+    facts.prove('node.fs.dataKind', context.dataKind, 'bounded Node fs data analysis');
   return facts;
 }
 
@@ -69,6 +75,18 @@ function requirementPredicate(key: string, value: unknown): Predicate {
       { fact: 'node.promise.schedulerCompatible', equals: true },
     ] };
   return { unknown: `Unrecognized node_fs requirement ${key}=${JSON.stringify(value)}` };
+}
+
+function backendPredicates(operation: NodeFsOperation): Predicate[] {
+  const checks: Predicate[] = [{ fact: 'node.fs.pathKind', equals: 'string' }];
+  if (operation === 'writeFileSync' || operation === 'promises.writeFile.awaited')
+    checks.push({ any: [
+      { fact: 'node.fs.dataKind', equals: 'string' },
+      { fact: 'node.fs.dataKind', equals: 'buffer' },
+    ] });
+  if (operation.startsWith('promises.'))
+    checks.push({ fact: 'node.fs.optionsRepresentable', equals: true });
+  return checks;
 }
 
 function allVerdict(checks: readonly Proof[]): Verdict {
@@ -96,7 +114,7 @@ export function proveNodeFsRule(database: RuleDatabase, operation: NodeFsOperati
   if (!spec) return fail('E_RULE_MISSING', `No reviewed Node fs adapter for ${operation}`);
   const loaded = reviewedRule(database, spec);
   const facts = contextFacts(context);
-  const predicates = Object.entries(loaded.rule.source.requirements ?? {}).map(([key, value]) => requirementPredicate(key, value));
-  const checks = predicates.map(predicate => evaluate(predicate, facts));
+  const canonical = Object.entries(loaded.rule.source.requirements ?? {}).map(([key, value]) => requirementPredicate(key, value));
+  const checks = [...canonical, ...backendPredicates(operation)].map(predicate => evaluate(predicate, facts));
   return { ruleId: spec.ruleId, helper: spec.helper, verdict: allVerdict(checks), checks, facts };
 }
