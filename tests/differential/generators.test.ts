@@ -47,6 +47,16 @@ const fixtures: Fixture[] = [
     `,
   },
   {
+    name: 'generator-yield-preserves-object-identity',
+    source: `
+      function* g(){ const value = {}; yield value; return value; }
+      const it = g();
+      const first = it.next();
+      const second = it.next();
+      console.log(first.value === second.value, first.done, second.done);
+    `,
+  },
+  {
     name: 'generator-yield-star-array',
     source: `
       function* g(){ yield* [1,2]; return 3; }
