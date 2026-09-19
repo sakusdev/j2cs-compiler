@@ -35,11 +35,11 @@ const bufferMetadataUnobserved: Predicate = { fact: 'node.buffer.metadataObserve
 
 export const NODE_COMPAT_ADAPTERS: readonly NodeCompatAdapter[] = [
   { ruleId: 'node.events.event-emitter.constructor', sha256: '7ae8c721a6499d2f4ddf2ea7b40998524ffcf96033c346d1affd6152a44ac44d', helper: 'NodeEvents.Create' },
-  { ruleId: 'node.events.event-emitter.on', sha256: '30caac2ef980c6de93b38fb9aaac4de72ef3e8dcfb3caf76a6716ebe7643bbb6', helper: 'NodeEvents.On' },
-  { ruleId: 'node.events.event-emitter.once', sha256: '97f98117a404d778fec5ca92dfe6d7405f8d1604e9912a5670c51e822457d198', helper: 'NodeEvents.Once' },
-  { ruleId: 'node.events.event-emitter.remove-listener', sha256: '1c796b320da1bbc9ac58542e071d17620cbc05bcaa8223b05830efee50f7af50', helper: 'NodeEvents.RemoveListener' },
-  { ruleId: 'node.events.event-emitter.emit', sha256: 'd336acbf84edcf6c1577484b281eb37659bdad1bbdf4d54a3a852aabdee41782', helper: 'NodeEvents.Emit' },
-  { ruleId: 'node.events.event-emitter.emit-error-unhandled', sha256: '14740ce5323bc4aefa67eeedc8523784ebfe6e12cfbc1c48c0b1d237a0d701c6', helper: 'NodeEvents.Emit' },
+  { ruleId: 'node.events.event-emitter.on', sha256: '30caac2ef980c6de93b38fb9aaac4de72ef3e8dcfb3caf76a6716ebe7643bbb6', helper: 'NodeEvents.On', requires: [metaEventsUnobserved] },
+  { ruleId: 'node.events.event-emitter.once', sha256: '97f98117a404d778fec5ca92dfe6d7405f8d1604e9912a5670c51e822457d198', helper: 'NodeEvents.Once', requires: [metaEventsUnobserved, rawListenersUnobserved] },
+  { ruleId: 'node.events.event-emitter.remove-listener', sha256: '1c796b320da1bbc9ac58542e071d17620cbc05bcaa8223b05830efee50f7af50', helper: 'NodeEvents.RemoveListener', requires: [metaEventsUnobserved] },
+  { ruleId: 'node.events.event-emitter.emit', sha256: 'd336acbf84edcf6c1577484b281eb37659bdad1bbdf4d54a3a852aabdee41782', helper: 'NodeEvents.Emit', requires: [listenerThisUnobserved] },
+  { ruleId: 'node.events.event-emitter.emit-error-unhandled', sha256: '14740ce5323bc4aefa67eeedc8523784ebfe6e12cfbc1c48c0b1d237a0d701c6', helper: 'NodeEvents.Emit', requires: [nonErrorPayload] },
 
   { ruleId: 'node.stream.high-water-mark', sha256: 'daa83c43c81971dfccd8ebb9661059199ba02ff912864adb51ef816928fe5459', helper: 'NodeStreams.ConfigureHighWaterMark' },
   { ruleId: 'node.stream.readable.push', sha256: 'eb065396a065fabb5332d70e0b563be7687059cec6f41dc00d31823c98703fbe', helper: 'NodeStreams.Push' },
