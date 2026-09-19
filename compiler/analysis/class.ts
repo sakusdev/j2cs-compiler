@@ -91,11 +91,13 @@ export function analyzeClassProgram(program: ParsedClassProgram, database: RuleD
     }, item.span, item.bindingName);
 
     for (const method of staticMethods) {
-      if (method.usesThis || method.usesSuper)
+      if (method.usesThis || method.usesSuper) {
+        checkedRule(database, 'staticMethod');
+        if (method.usesSuper) checkedRule(database, 'superStatic');
         deferred.push({ span: method.span, feature: `static method ${item.bindingName}.${method.name} with dynamic this/super`,
           canonicalRules: [CLASS_RULES.staticMethod.id, CLASS_RULES.superStatic.id],
           dependency: 'constructor-object receiver/super descriptor semantics are not independently proven' });
-      else addTrace('staticMethod', {
+      } else addTrace('staticMethod', {
         static_method_does_not_use_this_as_constructor_object: 'Normalized method scan proves no ThisKeyword.',
         no_static_super_dynamic_access: 'Normalized method scan proves no SuperKeyword.',
         class_value_not_reflected: 'Class-lane grammar only permits statically resolved field/method operations and console output.',
