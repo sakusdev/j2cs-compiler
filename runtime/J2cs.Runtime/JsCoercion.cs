@@ -55,6 +55,21 @@ public static class JsCoercion
         return modulo >= 2147483648d ? modulo - 4294967296d : modulo;
     }
 
+    // Canonical BIGINT/COERCION helper entry points from the pinned j2cs rule DB.
+    // They are intentionally typed against JsBinaryValue until the shared JsValue
+    // lattice gains BigInt on its owning compiler workstream.
+    public static JsBigInt NumberToBigInt(double value) => JsBigInt.NumberToBigInt(value);
+
+    public static JsStringToBigIntResult StringToBigInt(string value)
+        => JsBigInt.TryStringToBigInt(value, out var bigint)
+            ? JsStringToBigIntResult.FromValue(bigint)
+            : JsStringToBigIntResult.Failure;
+
+    public static JsBigInt ToBigIntPrimitive(JsBinaryValue value) => JsBigInt.ToBigIntPrimitive(value);
+    public static JsBigInt BigIntFunctionPrimitive(JsBinaryValue value) => JsBigInt.BigIntFunctionPrimitive(value);
+    public static JsBigInt ToBigInt64(JsBigInt value) => JsBigInt.ToBigInt64(value);
+    public static JsBigInt ToBigUint64(JsBigInt value) => JsBigInt.ToBigUint64(value);
+
     internal static string TrimWhitespace(string value)
     {
         int start = 0, end = value.Length;
