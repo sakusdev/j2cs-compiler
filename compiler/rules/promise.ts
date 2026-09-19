@@ -73,7 +73,7 @@ function checkedRule(database: RuleDatabase, ruleId: string): LoadedRule {
   return loaded;
 }
 
-function eq(fact: string, equals: string | boolean): Predicate => ({ fact, equals });
+const eq = (fact: string, equals: string | boolean): Predicate => ({ fact, equals });
 
 function requirementPredicate(ruleId: string, key: string, value: unknown): Predicate {
   if (key === 'constructor' && value === 'intrinsic Promise') return eq('promise.constructor', 'intrinsic');
