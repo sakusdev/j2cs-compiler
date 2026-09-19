@@ -5,14 +5,14 @@ import { fail } from '../diagnostics/index.js';
 import { Facts, type Fact, type FactModel } from '../analysis/facts.js';
 import { loadRules, type LoadedRule, type RuleDatabase } from '../rules/loader.js';
 
-export type DynamicModuleConstruct = 'dynamic-import' | 'top-level-await' | 'evaluate-once' | 'dependency-order';
+export type DynamicModuleConstruct = 'dynamic-import' | 'top-level-await';
 export type DynamicModuleProofVerdict = 'proven' | 'disproven' | 'unknown';
 
 export interface DynamicModuleAdapter {
   ruleId: string;
   sha256: string;
   construct: DynamicModuleConstruct;
-  lowering: 'JsDynamicModuleRuntime.DynamicImport' | 'JsDynamicModuleRuntime.EvaluateWithTopLevelAwait' | 'JsDynamicModuleRuntime.Evaluate';
+  lowering: 'JsDynamicModuleRuntime.DynamicImport' | 'JsDynamicModuleRuntime.EvaluateWithTopLevelAwait';
 }
 
 export interface DynamicModuleRequirementCheck {
@@ -47,7 +47,6 @@ const requirementFacts: Readonly<Record<string, string>> = {
   source_type: 'module.sourceType',
   location: 'module.location',
   specifier_may_be_dynamic: 'module.specifierMayBeDynamic',
-  graph_statically_known_or_runtime_linked: 'module.graphLinked',
 };
 
 function checkRequirement(requirement: string, expected: unknown, facts: FactModel): DynamicModuleRequirementCheck {
@@ -80,7 +79,10 @@ function checkRequirement(requirement: string, expected: unknown, facts: FactMod
   };
 }
 
-export function proveDynamicModuleRequirements(requirements: Readonly<Record<string, unknown>>, facts: FactModel): DynamicModuleProof {
+export function proveDynamicModuleRequirements(
+  requirements: Readonly<Record<string, unknown>>,
+  facts: FactModel,
+): DynamicModuleProof {
   const checks = Object.entries(requirements).map(([key, value]) => checkRequirement(key, value, facts));
   return { verdict: aggregate(checks.map(check => check.verdict)), checks };
 }
@@ -105,8 +107,10 @@ export class DynamicModuleRuleIndex {
   prove(construct: DynamicModuleConstruct, facts: FactModel): DynamicModuleSelection {
     const candidate = this.byConstruct.get(construct);
     if (!candidate) fail('E_MODULE_CONSTRUCT', `No reviewed dynamic-module rule for ${construct}.`);
-    const requirements = candidate.loaded.rule.source.requirements ?? {};
-    return { ...candidate, proof: proveDynamicModuleRequirements(requirements, facts) };
+    return {
+      ...candidate,
+      proof: proveDynamicModuleRequirements(candidate.loaded.rule.source.requirements ?? {}, facts),
+    };
   }
 }
 
@@ -123,11 +127,10 @@ export async function loadDynamicModuleAdapters(file = ADAPTERS): Promise<Dynami
   if (registry.version !== 1 || !Array.isArray(registry.adapters))
     return fail('E_MODULE_ADAPTER_SCHEMA', 'Unsupported dynamic-module adapter registry.');
 
-  const constructs = new Set<DynamicModuleConstruct>(['dynamic-import', 'top-level-await', 'evaluate-once', 'dependency-order']);
+  const constructs = new Set<DynamicModuleConstruct>(['dynamic-import', 'top-level-await']);
   const lowerings = new Set<DynamicModuleAdapter['lowering']>([
     'JsDynamicModuleRuntime.DynamicImport',
     'JsDynamicModuleRuntime.EvaluateWithTopLevelAwait',
-    'JsDynamicModuleRuntime.Evaluate',
   ]);
   const result: DynamicModuleAdapter[] = [];
   for (const entry of registry.adapters) {
@@ -152,19 +155,11 @@ export async function createDynamicModuleRuleIndex(ruleDb = path.join(ROOT, 'rul
 export function dynamicImportFacts(): Facts {
   return new Facts()
     .prove('profile.host', 'Node.js', 'Closed Node host contract for the dynamic-import runtime boundary')
-    .prove('module.specifierMayBeDynamic', true, 'Dynamic import accepts a runtime specifier and delegates resolution to the host');
+    .prove('module.specifierMayBeDynamic', true, 'Runtime specifiers are resolved only by the explicit dynamic-module host');
 }
 
 export function topLevelAwaitFacts(): Facts {
   return new Facts()
-    .prove('module.sourceType', 'ECMAScript module', 'Top-level await is admitted only for an explicitly linked ESM module record')
-    .prove('module.location', 'module top level', 'Async evaluation is attached to the module body, not an ordinary function');
-}
-
-export function moduleEvaluationFacts(graphLinked = true): Facts {
-  return new Facts()
-    .prove('module.sourceType', 'ECMAScript module', 'Evaluation operates on an ESM module record')
-    .prove('module.graphLinked', graphLinked, graphLinked
-      ? 'The runtime host resolved the requested dependency graph before evaluation'
-      : 'The dependency graph has not been proven linked');
+    .prove('module.sourceType', 'ECMAScript module', 'Top-level await is admitted only for a linked ESM module record')
+    .prove('module.location', 'module top level', 'Async evaluation belongs to the module body rather than an ordinary function');
 }
