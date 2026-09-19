@@ -28,6 +28,8 @@ public sealed class JsEnvironment
     }
 
     public JsValue Read(int bindingId) => Find(bindingId).Value;
+    public static JsValue Read(JsEnvironment environment, int bindingId)
+        => (environment ?? throw new ArgumentNullException(nameof(environment))).Read(bindingId);
 
     public JsValue Assign(int bindingId, JsValue value)
     {
