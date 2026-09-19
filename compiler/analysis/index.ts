@@ -193,7 +193,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       case 'binary': {
         const left = expression(n.left, f), right = expression(n.right, f);
         let types: TypeSet;
-        if (['<', '<=', '>', '>=', '===', '!=='].includes(n.op)) types = ['Boolean'];
+        if (['<', '<=', '>', '>=', '==', '!=', '===', '!=='].includes(n.op)) types = ['Boolean'];
         else if (n.op === '+') types = addTypes(left.types, right.types);
         else types = ['Number'];
         return { ...n, left, right, types };
@@ -278,6 +278,16 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         }
         if (n.callee.kind !== 'identifier') fail('E_INDIRECT_CALL', 'Only statically resolved direct calls are supported.', n.span);
         const binding = bindings.references.get(n.callee.id)!;
+        if (binding.kind === 'intrinsic') {
+          if (!['isFinite', 'isNaN', 'parseFloat', 'parseInt'].includes(binding.name))
+            fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
+          const target = binding.name as 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt';
+          const args = n.args.map(a => expression(a, f));
+          const validArity = target === 'parseInt' ? args.length === 1 || args.length === 2 : args.length === 1;
+          if (!validArity) fail('E_ARITY', `Intrinsic ${target} is currently supported only at its reviewed arity.`, n.span);
+          return { ...n, kind: 'call', binding, target, args, arity: args.length,
+            types: target === 'isFinite' || target === 'isNaN' ? ['Boolean'] : ['Number'] };
+        }
         if (binding.kind !== 'function') fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
         const args = n.args.map(a => expression(a, f)), instance = instantiate(binding, args, n);
         return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length, types: instance.returnTypes };
