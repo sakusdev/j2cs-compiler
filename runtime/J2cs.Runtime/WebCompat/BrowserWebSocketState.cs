@@ -159,7 +159,7 @@ public sealed class BrowserWebSocketState
         if (value.Length == 0) return false;
         const string separators = "()<>@,;:\"/[]?={} \t";
         foreach (char c in value)
-            if (c < 0x21 || c > 0x7e || separators.Contains(c, StringComparison.Ordinal))
+            if (c < 0x21 || c > 0x7e || separators.IndexOf(c) >= 0)
                 return false;
         return true;
     }
