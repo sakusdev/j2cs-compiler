@@ -15,7 +15,9 @@ export function programFacts(): Facts {
 function bindingFacts(f: Facts, b: Binding): void {
   f.prove('binding.kind', b.kind, `Resolved binding #${b.id} (${b.name})`)
     .prove('binding.origin', b.kind === 'intrinsic' ? 'intrinsic' : 'declaration', 'Lexical binder provenance')
-    .prove('binding.mutable', ['let', 'parameter'].includes(b.kind), 'Binder rejects writes to other binding kinds');
+    .prove('binding.mutable', ['let', 'parameter'].includes(b.kind), 'Binder rejects writes to other binding kinds')
+    .prove('binding.lexical', ['const', 'let', 'parameter'].includes(b.kind), 'Resolved lexical/parameter binding class')
+    .prove('binding.perIteration', b.perIteration === true, 'Binder marks loop lexical bindings requiring fresh iteration cells');
   if (b.kind === 'intrinsic') f.prove('binding.globalProperty', b.name, 'Unshadowed intrinsic resolution')
     .prove('binding.intrinsic', `%${b.name}%`, 'Intrinsic binding identity');
 }
@@ -103,4 +105,8 @@ export function expressionFacts(e: SemanticExpr): Facts {
 }
 export function declarationFacts(fn: SemanticFunction): Facts {
   const f = programFacts(); functionFacts(f, fn.binding); bindingFacts(f, fn.binding); return f;
+}
+
+export function captureFacts(binding: Binding): Facts {
+  const f = programFacts(); bindingFacts(f, binding); return f;
 }
