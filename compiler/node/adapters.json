@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "ruleDbCommit": "35ca8d859f9352e90ee2497f4ac8f6edb9c19ed1",
+  "adapters": [
+    {
+      "ruleId": "node.url.fileurltopath",
+      "sha256": "51b06cebe385468d30d009700e937be32579f08133d9e4ea5d9731a651837e0b",
+      "selector": "node:url.fileURLToPath",
+      "lowering": "NodeUrl.FileUrlToPath",
+      "requires": [
+        { "fact": "node.url.input", "equals": "string" },
+        { "fact": "node.url.platformMode", "equals": "explicit" }
+      ]
+    },
+    {
+      "ruleId": "node.util.format",
+      "sha256": "688b7adeec30b12c31f640c833453cf3584805424f1fa6e2b56cc215ee0b0f90",
+      "selector": "node:util.format",
+      "lowering": "NodeUtil.Format",
+      "requires": [
+        { "fact": "node.valueDomain", "equals": "primitive" }
+      ]
+    },
+    {
+      "ruleId": "node.zlib.gzip.sync",
+      "sha256": "51b254bea4c9925c1e3e28fe3f125bfe7ce53c488e8439f5d0b5d20f281e5f53",
+      "selector": "node:zlib.gzipSync",
+      "lowering": "NodeZlib.SyncGzipSync",
+      "requires": [
+        { "fact": "node.zlib.input", "equals": "bytes-or-utf8-string" },
+        { "fact": "node.zlib.options", "equals": "defaults" },
+        { "fact": "node.bufferBridge", "equals": "proven" }
+      ]
+    },
+    {
+      "ruleId": "web.urlsearchparams.to-string",
+      "sha256": "f2c8a51bc1614a3090f9645a93f3c703af5cbe78b0a0c553cad15a182b8c8473",
+      "selector": "URLSearchParams.toString",
+      "lowering": "NodeUrlSearchParams.Serialize",
+      "requires": [
+        { "fact": "web.urlSearchParams.profile", "equals": "string-list-v1" }
+      ]
+    }
+  ]
+}
