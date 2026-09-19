@@ -69,11 +69,11 @@ const fixtures: Fixture[] = [
   {
     name: 'generator-yield-star-generator-completion',
     source: `
-      function* inner(){ yield 1; return 4; }
+      function* inner(){ const x = yield 1; return x; }
       function* outer(){ const x = yield* inner(); return x; }
       const it = outer();
       let r = it.next(); console.log(r.value === 1, r.done);
-      r = it.next(7); console.log(r.value === 4, r.done);
+      r = it.next(7); console.log(r.value === 7, r.done);
     `,
   },
   {
