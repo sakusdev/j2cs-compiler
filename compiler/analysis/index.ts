@@ -44,9 +44,24 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   function cloneEnv(env: Environment): Environment {
     return new Map([...env].map(([id, v]) => [id, cloneValue(v)]));
   }
+  function cloneShape(s: Shape): Shape {
+    return { kind: s.kind, length: s.length,
+      properties: new Map([...s.properties].map(([k, v]) => [k, cloneValue(v)])) };
+  }
   function cloneHeap(heap: Map<number, Shape>): Map<number, Shape> {
-    return new Map([...heap].map(([id, s]) => [id, { kind: s.kind, length: s.length,
-      properties: new Map([...s.properties].map(([k, v]) => [k, cloneValue(v)])) }]));
+    return new Map([...heap].map(([id, shape]) => [id, cloneShape(shape)]));
+  }
+  function currentInvocation(): InvocationContext | undefined { return invocations[invocations.length - 1]; }
+  function mergeShapes(shapes: Shape[]): Shape {
+    if (!shapes.length) throw new Error('Cannot merge an empty constructor shape set.');
+    const properties = new Map<string, ValueInfo>();
+    const keys = new Set<string>(shapes.flatMap(shape => [...shape.properties.keys()]));
+    for (const key of keys)
+      properties.set(key, unionValue(...shapes.map(shape => shape.properties.get(key) ?? UNDEFINED)));
+    const allArrays = shapes.every(shape => shape.kind === 'Array');
+    const lengths = shapes.map(shape => shape.length);
+    const length = allArrays && lengths.every(x => x === lengths[0]) ? lengths[0] : undefined;
+    return { kind: allArrays ? 'Array' : 'Object', length, properties };
   }
   function stateOf(f: Flow): State { return { env: cloneEnv(f.env), heap: cloneHeap(f.heap) }; }
   function joinEnv(template: Environment, paths: Environment[]): Environment {
