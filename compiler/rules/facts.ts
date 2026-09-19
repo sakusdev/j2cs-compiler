@@ -26,11 +26,13 @@ function functionFacts(f: Facts): void {
     .prove('function.parameters', 'simple', 'Parser rejects default/rest/optional/destructured parameters');
 }
 function receiverFacts(f: Facts, e: SemanticExpr): void {
-  if (e.kind !== 'member' && !(e.kind === 'call' && (e.target === 'array.push' || e.target === 'object.hasOwn'))) return;
+  if (e.kind !== 'member' && !(e.kind === 'call' && 'receiver' in e)) return;
   const receiver = e.kind === 'member' ? e.object : e.receiver;
-  f.type('receiver', receiver.types, 'Flow-sensitive receiver type and compiler-owned reference tracking')
-    .prove('receiver.proxy', false, 'No Proxy construction or external object ingress is admitted')
-    .prove('object.representation', 'JsObject', 'Compiler-owned Object/Array references use JsObject/JsArray runtime storage');
+  f.type('receiver', receiver.types, 'Flow-sensitive receiver type and compiler-owned reference tracking');
+  if (receiver.types.every(t => t === 'Object' || t === 'Array')) {
+    f.prove('receiver.proxy', false, 'No Proxy construction or external object ingress is admitted')
+      .prove('object.representation', 'JsObject', 'Compiler-owned Object/Array references use JsObject/JsArray runtime storage');
+  }
   if (receiver.types.length === 1 && receiver.types[0] === 'Array') {
     f.prove('receiver.representation', 'JsArray', 'Exact Array flow type maps to canonical JsArray representation')
       .prove('receiver.indexedDataOnly', true, 'Supported arrays contain ordinary indexed data properties/holes only');
@@ -76,6 +78,9 @@ export function expressionFacts(e: SemanticExpr): Facts {
     else if (e.target === 'array.push') f.prove('member.integrity', 'pristine', 'Receiver has no own push property and Array prototype is pristine');
     else if (e.target === 'object.hasOwn') f.prove('member.integrity', 'pristine', 'Direct unshadowed Object.hasOwn with static key')
       .prove('object.ownPropertyTest', true, 'JsObject/JsArray explicitly preserve own-property presence separately from undefined');
+    else if (typeof e.target === 'string' && (e.target.startsWith('array.') || e.target.startsWith('string.')))
+      f.prove('member.integrity', 'pristine', 'Direct builtin member resolution is proven; supported Array receivers have no own override')
+        .prove('call.argumentCount', e.args.length, 'AST builtin argument count');
     else if (typeof e.target === 'number') {
       functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
         .prove('function.parameterCount', e.arity, 'Resolved declaration signature');
