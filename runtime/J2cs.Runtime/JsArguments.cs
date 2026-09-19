@@ -31,7 +31,10 @@ public sealed class JsArguments
 
     private static JsValue BuildRest(JsArguments arguments, int start)
     {
-        var result = JsArray.Create(Math.Max(0, arguments.values.Length - start));
+        start = Math.Clamp(start, 0, arguments.values.Length);
+        var result = JsArray.Create(arguments.values.Length - start);
+        for (var i = start; i < arguments.values.Length; i++)
+            result = JsArray.DefineElement(result, i - start, arguments.values[i]);
         return result;
     }
 }
