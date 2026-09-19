@@ -242,7 +242,8 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     switch (n.kind) {
       case 'literal': return { ...n, types: literalType(n.value) };
       case 'object': {
-        if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
+        if (active.size && currentInvocation()?.mode !== 'construct')
+          fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object literals inside ordinary calls require per-call heap summaries and are deferred.', n.span);
         if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Object allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
         const ref = n.id, shape: Shape = { kind: 'Object', properties: new Map() };
         f.heap.set(ref, shape);
@@ -252,7 +253,8 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         return { ...n, kind: 'object', properties, types: ['Object'], refs: [ref] };
       }
       case 'array': {
-        if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Array literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
+        if (active.size && currentInvocation()?.mode !== 'construct')
+          fail('E_OBJECT_FUNCTION_BOUNDARY', 'Array literals inside ordinary calls require per-call heap summaries and are deferred.', n.span);
         if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Array allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
         const ref = n.id, shape: Shape = { kind: 'Array', length: n.elements.length, properties: new Map() };
         f.heap.set(ref, shape);
@@ -261,6 +263,22 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
           const value = expression(e, f); shape.properties.set(String(i), valueOf(value)); return value;
         });
         return { ...n, kind: 'array', elements, types: ['Array'], refs: [ref] };
+      }
+      case 'thisValue': {
+        const context = currentInvocation();
+        if (!context || context.mode !== 'construct' || !context.receiver)
+          fail('E_THIS_CALL_UNSUPPORTED', 'Ordinary-call this binding is owned by the separate this-call lane and remains fail-closed.', n.span);
+        context.observes.add('this');
+        return withValue({ ...n, kind: 'thisValue' as const, slot: `t${context.instanceId}` }, context.receiver);
+      }
+      case 'newTarget': {
+        const context = currentInvocation();
+        if (!context) fail('E_NEW_TARGET_CONTEXT', 'new.target is only available while analyzing a function invocation.', n.span);
+        context.observes.add('new.target');
+        return {
+          ...n, kind: 'newTarget', types: context.mode === 'construct' ? ['Object'] : ['Undefined'],
+          ...(context.mode === 'construct' ? { constructorTemplateId: context.binding.id } : {}),
+        };
       }
       case 'identifier': {
         const binding = bindings.references.get(n.id)!;
