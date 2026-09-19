@@ -104,7 +104,7 @@ export function proveReferenceRule(database: RuleDatabase, id: ReferenceRuleId, 
   if (loaded.sha256 !== contract.sha256) {
     return fail('E_RULE_CONTRACT', `Canonical reference rule changed and requires proof-adapter review: ${id}`);
   }
-  const normalizedFile = loaded.file.replaceAll('\\\\', '/');
+  const normalizedFile = loaded.file.replaceAll(String.fromCharCode(92), '/');
   if (normalizedFile !== contract.file || loaded.rule.strategy !== contract.strategy
       || loaded.rule.target.kind !== contract.targetKind || loaded.rule.target.helper !== contract.helper) {
     return fail('E_RULE_CONTRACT', `Canonical reference rule changed shape and requires review: ${id}`);
