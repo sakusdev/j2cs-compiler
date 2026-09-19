@@ -52,8 +52,8 @@ internal static class NodeFsEncodingCodec
         {
             NodeFsTextEncoding.Utf8 => Utf8.GetBytes(text),
             NodeFsTextEncoding.Utf16Le => Encoding.Unicode.GetBytes(text),
-            NodeFsTextEncoding.Latin1 => EncodeLatin1(text, false),
-            NodeFsTextEncoding.Ascii => EncodeLatin1(text, true),
+            NodeFsTextEncoding.Latin1 => EncodeLatin1(text),
+            NodeFsTextEncoding.Ascii => EncodeLatin1(text),
             NodeFsTextEncoding.Hex => DecodeHex(text),
             NodeFsTextEncoding.Base64 => DecodeBase64(text, false),
             NodeFsTextEncoding.Base64Url => DecodeBase64(text, true),
@@ -68,14 +68,10 @@ internal static class NodeFsEncodingCodec
         return new string(chars);
     }
 
-    private static byte[] EncodeLatin1(string text, bool ascii)
+    private static byte[] EncodeLatin1(string text)
     {
         var bytes = new byte[text.Length];
-        for (var i = 0; i < text.Length; i++)
-        {
-            var value = (byte)(text[i] & 0xff);
-            bytes[i] = ascii ? (byte)(value & 0x7f) : value;
-        }
+        for (var i = 0; i < text.Length; i++) bytes[i] = (byte)(text[i] & 0xff);
         return bytes;
     }
 
@@ -101,7 +97,7 @@ internal static class NodeFsEncodingCodec
     private static byte[] DecodeBase64(string text, bool url)
     {
         var normalized = new string(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
-        if (url) normalized = normalized.Replace('-', '+').Replace('_', '/');
+        normalized = normalized.Replace('-', '+').Replace('_', '/');
         normalized = normalized.TrimEnd('=');
         normalized += new string('=', (4 - normalized.Length % 4) % 4);
         try
