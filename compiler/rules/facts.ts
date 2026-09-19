@@ -19,8 +19,9 @@ function bindingFacts(f: Facts, b: Binding): void {
   if (b.kind === 'intrinsic') f.prove('binding.globalProperty', b.name, 'Unshadowed intrinsic resolution')
     .prove('binding.intrinsic', `%${b.name}%`, 'Intrinsic binding identity');
 }
-function functionFacts(f: Facts): void {
-  f.prove('function.kind', 'ordinary', 'Parser admits only ordinary declarations')
+function functionFacts(f: Facts, async = false): void {
+  f.prove('function.kind', async ? 'async function' : 'ordinary',
+    async ? 'Parser normalized an async function declaration' : 'Parser normalized an ordinary function declaration')
     .prove('function.scope', 'module', 'Binder admits only top-level module-local functions')
     .prove('function.observes', [], 'Syntax/binding checks reject this, arguments, new.target, identity, properties, construction and escape')
     .prove('function.parameters', 'simple', 'Parser rejects default/rest/optional/destructured parameters');
@@ -56,6 +57,10 @@ export function expressionFacts(e: SemanticExpr): Facts {
     f.type('operand', e.operand.types, 'Unary operand analysis')
       .prove('operands.domain', isPrimitiveSet(e.operand.types) ? 'primitive' : 'ecmascript-value', 'Complete unary operand type set')
       .prove('operand.domain', isPrimitiveSet(e.operand.types) ? 'primitive' : 'ecmascript-value', 'Complete unary operand type set');
+  } else if (e.kind === 'await') {
+    f.type('operand', e.operand.types, 'Await operand flow analysis')
+      .prove('operand.domain', isPrimitiveSet(e.operand.types) ? 'primitive' : 'ecmascript-value',
+        'Await admission proves whether PromiseResolve may be reduced to a non-thenable value');
   } else if (e.kind === 'update') {
     f.type('operand', e.operandTypes, 'Update operand GetValue analysis')
       .prove('operands.domain', isPrimitiveSet(e.operandTypes) ? 'primitive' : 'ecmascript-value', 'Complete update operand type set');
@@ -76,8 +81,10 @@ export function expressionFacts(e: SemanticExpr): Facts {
     else if (e.target === 'array.push') f.prove('member.integrity', 'pristine', 'Receiver has no own push property and Array prototype is pristine');
     else if (e.target === 'object.hasOwn') f.prove('member.integrity', 'pristine', 'Direct unshadowed Object.hasOwn with static key')
       .prove('object.ownPropertyTest', true, 'JsObject/JsArray explicitly preserve own-property presence separately from undefined');
-    else if (typeof e.target === 'number') {
-      functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
+    else if (e.target === 'queueMicrotask') {
+      f.prove('callback.identity', `function:${e.callback}`, 'Statically resolved queueMicrotask callback specialization');
+    } else if (typeof e.target === 'number') {
+      functionFacts(f, e.async); f.prove('call.argumentCount', e.args.length, 'AST argument count')
         .prove('function.parameterCount', e.arity, 'Resolved declaration signature');
     } else {
       f.prove('call.argumentCount', e.args.length, 'AST intrinsic argument count');
@@ -98,5 +105,5 @@ export function expressionFacts(e: SemanticExpr): Facts {
   return f;
 }
 export function declarationFacts(fn: SemanticFunction): Facts {
-  const f = programFacts(); functionFacts(f); bindingFacts(f, fn.binding); return f;
+  const f = programFacts(); functionFacts(f, fn.async); bindingFacts(f, fn.binding); return f;
 }
