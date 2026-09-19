@@ -36,7 +36,7 @@ internal static class NodeFsEncodingCodec
     public static string Decode(ReadOnlySpan<byte> bytes, NodeFsTextEncoding encoding) => encoding switch
     {
         NodeFsTextEncoding.Utf8 => Utf8.GetString(bytes),
-        NodeFsTextEncoding.Utf16Le => Encoding.Unicode.GetString(bytes),
+        NodeFsTextEncoding.Utf16Le => DecodeUtf16Le(bytes),
         NodeFsTextEncoding.Latin1 => Encoding.Latin1.GetString(bytes),
         NodeFsTextEncoding.Ascii => DecodeAscii(bytes),
         NodeFsTextEncoding.Hex => Convert.ToHexString(bytes).ToLowerInvariant(),
@@ -51,14 +51,33 @@ internal static class NodeFsEncodingCodec
         return encoding switch
         {
             NodeFsTextEncoding.Utf8 => Utf8.GetBytes(text),
-            NodeFsTextEncoding.Utf16Le => Encoding.Unicode.GetBytes(text),
+            NodeFsTextEncoding.Utf16Le => EncodeUtf16Le(text),
             NodeFsTextEncoding.Latin1 => EncodeLatin1(text),
             NodeFsTextEncoding.Ascii => EncodeLatin1(text),
             NodeFsTextEncoding.Hex => DecodeHex(text),
-            NodeFsTextEncoding.Base64 => DecodeBase64(text, false),
-            NodeFsTextEncoding.Base64Url => DecodeBase64(text, true),
+            NodeFsTextEncoding.Base64 => DecodeBase64(text),
+            NodeFsTextEncoding.Base64Url => DecodeBase64(text),
             _ => throw new InvalidOperationException("Unreachable Node fs encoding."),
         };
+    }
+
+    private static string DecodeUtf16Le(ReadOnlySpan<byte> bytes)
+    {
+        var chars = new char[bytes.Length / 2];
+        for (var i = 0; i < chars.Length; i++)
+            chars[i] = (char)(bytes[i * 2] | (bytes[i * 2 + 1] << 8));
+        return new string(chars);
+    }
+
+    private static byte[] EncodeUtf16Le(string text)
+    {
+        var bytes = new byte[text.Length * 2];
+        for (var i = 0; i < text.Length; i++)
+        {
+            bytes[i * 2] = (byte)(text[i] & 0xff);
+            bytes[i * 2 + 1] = (byte)(text[i] >> 8);
+        }
+        return bytes;
     }
 
     private static string DecodeAscii(ReadOnlySpan<byte> bytes)
@@ -94,19 +113,37 @@ internal static class NodeFsEncodingCodec
         return output.ToArray();
     }
 
-    private static byte[] DecodeBase64(string text, bool url)
+    private static byte[] DecodeBase64(string text)
     {
-        var normalized = new string(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
-        normalized = normalized.Replace('-', '+').Replace('_', '/');
-        normalized = normalized.TrimEnd('=');
-        normalized += new string('=', (4 - normalized.Length % 4) % 4);
-        try
+        static int Digit(char c)
+            => c is >= 'A' and <= 'Z' ? c - 'A'
+             : c is >= 'a' and <= 'z' ? c - 'a' + 26
+             : c is >= '0' and <= '9' ? c - '0' + 52
+             : c is '+' or '-' ? 62
+             : c is '/' or '_' ? 63
+             : -1;
+
+        var digits = new List<int>(text.Length);
+        foreach (var c in text)
         {
-            return Convert.FromBase64String(normalized);
+            if (c == '=') break;
+            var digit = Digit(c);
+            if (digit >= 0) digits.Add(digit);
         }
-        catch (FormatException ex)
+
+        var output = new List<byte>(digits.Count * 3 / 4);
+        for (var i = 0; i + 1 < digits.Count; i += 4)
         {
-            throw new NodeFsArgumentException("ERR_INVALID_ARG_VALUE", $"Invalid {(url ? "base64url" : "base64")} data: {ex.Message}", nameof(text));
+            var a = digits[i];
+            var b = digits[i + 1];
+            output.Add((byte)((a << 2) | (b >> 4)));
+            if (i + 2 >= digits.Count) break;
+            var d2 = digits[i + 2];
+            output.Add((byte)((b << 4) | (d2 >> 2)));
+            if (i + 3 >= digits.Count) break;
+            var d3 = digits[i + 3];
+            output.Add((byte)((d2 << 6) | d3));
         }
+        return output.ToArray();
     }
 }
