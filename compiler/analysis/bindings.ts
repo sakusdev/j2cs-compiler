@@ -30,6 +30,11 @@ export function resolveBindings(program: Program): Bindings {
       fail('E_CAPTURE', `Capture of '${b.name}' needs closure/TDZ analysis, which is not implemented.`, n.span);
     references.set(n.id, b); return b;
   }
+  function writable(n: Expr & { kind: 'identifier' }, scope: Scope, span: Node['span']): Binding {
+    const b = resolve(n, scope);
+    if (b.kind !== 'let' && b.kind !== 'parameter') fail('E_IMMUTABLE_WRITE', `Assignment to '${b.name}' is unsupported (${b.kind}).`, span);
+    return b;
+  }
   function expr(n: Expr, s: Scope, use: 'value' | 'callee' | 'receiver' = 'value'): void {
     switch (n.kind) {
       case 'literal': return;
@@ -45,10 +50,8 @@ export function resolveBindings(program: Program): Bindings {
       case 'binary': expr(n.left, s); expr(n.right, s); return;
       case 'unary': expr(n.operand, s); return;
       case 'assign': {
-        if (n.target.kind === 'identifier') {
-          const b = resolve(n.target, s);
-          if (b.kind !== 'let' && b.kind !== 'parameter') fail('E_IMMUTABLE_WRITE', `Assignment to '${b.name}' is unsupported (${b.kind}).`, n.span);
-        } else {
+        if (n.target.kind === 'identifier') writable(n.target, s, n.span);
+        else {
           expr(n.target.object, s, 'receiver');
           if (n.target.object.kind === 'identifier') {
             const b = references.get(n.target.object.id)!;
@@ -57,11 +60,13 @@ export function resolveBindings(program: Program): Bindings {
         }
         expr(n.value, s); return;
       }
+      case 'compound': writable(n.target, s, n.span); expr(n.value, s); return;
+      case 'update': writable(n.target, s, n.span); return;
       case 'member': expr(n.object, s, 'receiver'); return;
       case 'call': expr(n.callee, s, 'callee'); n.args.forEach(a => expr(a, s)); return;
     }
   }
-  function body(nodes: Statement[], s: Scope, top = false): void {
+  function body(nodes: Statement[], s: Scope, top = false, loopDepth = 0): void {
     for (const n of nodes) {
       if (n.kind === 'variable') declare(s, n, n.name, n.mode);
       if (n.kind === 'function') {
@@ -69,25 +74,41 @@ export function resolveBindings(program: Program): Bindings {
         declare(s, n, n.name, 'function', n);
       }
     }
-    for (const n of nodes) visit(n, s);
+    for (const n of nodes) visit(n, s, loopDepth);
   }
-  function visit(n: Statement, s: Scope): void {
+  function visit(n: Statement, s: Scope, loopDepth: number): void {
     switch (n.kind) {
       case 'variable': if (n.initializer) expr(n.initializer, s); return;
       case 'expression': expr(n.expression, s); return;
-      case 'block': body(n.body, { parent: s, owner: s.owner, names: new Map() }); return;
-      case 'if': expr(n.condition, s); visit(n.then, s); if (n.otherwise) visit(n.otherwise, s); return;
+      case 'block': body(n.body, { parent: s, owner: s.owner, names: new Map() }, false, loopDepth); return;
+      case 'if': expr(n.condition, s); visit(n.then, s, loopDepth); if (n.otherwise) visit(n.otherwise, s, loopDepth); return;
+      case 'while': expr(n.condition, s); visit(n.body, s, loopDepth + 1); return;
+      case 'doWhile': visit(n.body, s, loopDepth + 1); expr(n.condition, s); return;
+      case 'for': {
+        let loopScope = s;
+        if (n.initializer?.kind === 'variables') {
+          loopScope = { parent: s, owner: s.owner, names: new Map() };
+          for (const d of n.initializer.declarations) declare(loopScope, d, d.name, d.mode);
+          for (const d of n.initializer.declarations) if (d.initializer) expr(d.initializer, loopScope);
+        } else if (n.initializer?.kind === 'expression') expr(n.initializer.expression, s);
+        if (n.condition) expr(n.condition, loopScope);
+        if (n.update) expr(n.update, loopScope);
+        visit(n.body, loopScope, loopDepth + 1);
+        return;
+      }
+      case 'break': if (!loopDepth) fail('E_BREAK_CONTEXT', 'break outside a loop is unsupported.', n.span); return;
+      case 'continue': if (!loopDepth) fail('E_CONTINUE_CONTEXT', 'continue outside a loop is unsupported.', n.span); return;
       case 'return':
         if (s.owner === 0) fail('E_RETURN_CONTEXT', 'return outside a function is unsupported.', n.span);
         if (n.value) expr(n.value, s); return;
       case 'function': {
         const fs: Scope = { parent: s, owner: n.id + 1, names: new Map() };
         for (const p of n.params) declare(fs, p, p.name, 'parameter');
-        body(n.body.body, fs); return;
+        body(n.body.body, fs, false, 0); return;
       }
       case 'empty': return;
     }
   }
-  body(program.body, { parent: global, owner: 0, names: new Map() }, true);
+  body(program.body, { parent: global, owner: 0, names: new Map() }, true, 0);
   return { references, declarations, functions };
 }
