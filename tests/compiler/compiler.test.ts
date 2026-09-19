@@ -121,7 +121,7 @@ const diagnostics: [string, string, string][] = [
   ['eval', "eval('1');", 'E_UNRESOLVED_BINDING'],
   ['this', 'function f(){return this;}', 'E_UNSUPPORTED_SYNTAX'],
   ['argument access', 'function f(){return arguments;}', 'E_UNRESOLVED_BINDING'],
-  ['async', 'async function f(){}', 'E_UNSUPPORTED_SYNTAX'],
+  ['async generator', 'async function* f(){}', 'E_UNSUPPORTED_SYNTAX'],
   ['unbraced lexical declaration', 'if (true) let x=1;', 'E_UNSUPPORTED_SYNTAX'],
   ['TS annotation in JS', 'const x: number = 1;', 'E_UNSUPPORTED_SYNTAX'],
   ['strict reserved binding', '"use strict"; let yield = 1;', 'E_PARSE'],

@@ -20,6 +20,7 @@ const stringLiteral = (value: string): CE => ({ kind: 'literal', repr: 'string',
 const numberLiteral = (value: number): CE => ({ kind: 'literal', repr: 'number', value });
 export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgram {
   const trace: Trace[] = [], contracts = new Set<string>();
+  let usesMicrotasks = false;
   function select(selector: Selector, facts: FactModel, span: Span): string {
     const result = index.select(selector, facts), chosen = result.selected;
     if (!chosen || chosen.loaded.rule.strategy === 'unsupported') {
@@ -133,6 +134,9 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           default: return fail('E_LOWERING', `Unimplemented binary lowering ${op}.`, e.span);
         }
       }
+      case 'await':
+        return fail('E_ASYNC_AWAIT_SHAPE',
+          'await is currently supported only as a standalone expression statement or direct variable initializer in a linear async body.', e.span);
       case 'unary': {
         const op = select({ kind: 'unary', operator: e.op }, facts, e.span), operand = expression(e.operand);
         if (op === 'unary.number') return box({ kind: 'unary', repr: 'number', op: '-', value: unbox(operand, 'number') });
@@ -156,7 +160,17 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           if (op !== 'object.hasOwn') fail('E_LOWERING', 'Object.hasOwn adapter has no implementation.', e.span);
           return box(call('JsObject.HasOwn', [expression(e.receiver), stringLiteral(e.property)], 'boolean'));
         }
+        if (e.target === 'queueMicrotask') {
+          const op = select({ kind: 'call.intrinsic', intrinsic: 'queueMicrotask' }, facts, e.span);
+          if (op !== 'async.queueMicrotask') fail('E_LOWERING', 'queueMicrotask adapter has no implementation.', e.span);
+          usesMicrotasks = true;
+          return call('JsMicrotaskQueue.Enqueue', [{ kind: 'functionRef', repr: 'callback', name: `F${e.callback}` }]);
+        }
         if (typeof e.target === 'number') {
+          if (e.async) {
+            contracts.add('async.function-discarded-promise-result-v1');
+            return call(`F${e.target}`, e.args.map(expression));
+          }
           select({ kind: 'call.function' }, facts, e.span);
           return call(`F${e.target}`, e.args.map(expression));
         }
@@ -214,9 +228,52 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
         return { kind: 'return', value: expression(s.value) };
     }
   }
+  function lowerAwait(e: SE & { kind: 'await' }): CE {
+    const op = select({ kind: 'await.value' }, expressionFacts(e), e.span);
+    if (op !== 'async.awaitValue') fail('E_LOWERING', 'Primitive await adapter has no implementation.', e.span);
+    usesMicrotasks = true;
+    return expression(e.operand);
+  }
+  function asyncStatements(nodes: SS[]): CS[] {
+    const result: CS[] = [];
+    for (let i = 0; i < nodes.length; i++) {
+      const s = nodes[i]!;
+      if (s.kind === 'variable' && s.initializer.kind === 'await') {
+        contracts.add('async.await-linear-continuation-v1');
+        result.push({ kind: 'awaitValue', value: lowerAwait(s.initializer), parameter: `a${s.initializer.id}`,
+          binding: variable(s.binding), continuation: asyncStatements(nodes.slice(i + 1)) });
+        return result;
+      }
+      if (s.kind === 'expression' && s.expression.kind === 'await') {
+        contracts.add('async.await-linear-continuation-v1');
+        result.push({ kind: 'awaitValue', value: lowerAwait(s.expression), parameter: `a${s.expression.id}`,
+          continuation: asyncStatements(nodes.slice(i + 1)) });
+        return result;
+      }
+      if (s.kind === 'return') {
+        result.push({ kind: 'asyncReturn', value: expression(s.value) });
+        return result;
+      }
+      if (s.kind === 'block' || s.kind === 'if' || s.kind === 'while' || s.kind === 'doWhile' || s.kind === 'for'
+        || s.kind === 'break' || s.kind === 'continue')
+        fail('E_ASYNC_CONTROL_FLOW',
+          'Control flow inside async functions is deferred until continuation CFG lowering can preserve every suspension edge.', s.span);
+      result.push(statement(s));
+    }
+    return result;
+  }
   const functions = program.functions.map(fn => {
+    if (fn.async) {
+      contracts.add('async.function-synchronous-prefix-v1');
+      return { name: `F${fn.instanceId}`, params: fn.params.map(variable), body: asyncStatements(fn.body), asyncMicrotask: true };
+    }
     select({ kind: 'function' }, declarationFacts(fn), fn.span);
     return { name: `F${fn.instanceId}`, params: fn.params.map(variable), body: fn.body.map(statement) };
   });
-  return { ir: { functions, body: program.body.map(statement) }, trace, structuralContracts: [...contracts].sort() };
+  const body = program.body.map(statement);
+  if (usesMicrotasks) {
+    contracts.add('async.microtask-drain-after-top-level-v1');
+    body.push({ kind: 'expression', expression: call('JsMicrotaskQueue.Drain', []) });
+  }
+  return { ir: { functions, body }, trace, structuralContracts: [...contracts].sort() };
 }

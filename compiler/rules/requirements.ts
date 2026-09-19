@@ -107,6 +107,9 @@ const names: Record<string, string> = {
 };
 /** Translate only reviewed legacy vocabulary. Prose and unknown keys fail closed. */
 export function legacyPredicate(key: string, value: unknown): Predicate {
+  if (key === 'operand' && value === 'proven primitive or non-thenable builtin value') return primitiveDomain('operand');
+  if (key === 'global' && value === 'builtin queueMicrotask') return eq('binding.globalProperty', 'queueMicrotask');
+  if (key === 'not_overridden' && value === true) return eq('intrinsics.integrity', 'pristine');
   if (names[key] && ['string', 'number', 'boolean'].includes(typeof value))
     return eq(names[key]!, value as string | number | boolean);
   const excludes: Record<string, string> = {

@@ -8,6 +8,7 @@ export type SemanticExpr = Node & Typed & (
   | { kind: 'read'; binding: Binding }
   | { kind: 'binary'; op: string; left: SemanticExpr; right: SemanticExpr }
   | { kind: 'unary'; op: string; operand: SemanticExpr }
+  | { kind: 'await'; operand: SemanticExpr }
   | { kind: 'assign'; binding: Binding; value: SemanticExpr }
   | { kind: 'propertyAssign'; object: SemanticExpr; property: string; value: SemanticExpr }
   | { kind: 'compound'; op: '+=' | '-=' | '*=' | '/=' | '%='; binding: Binding; leftTypes: TypeSet; value: SemanticExpr }
@@ -15,7 +16,9 @@ export type SemanticExpr = Node & Typed & (
   | { kind: 'member'; object: SemanticExpr; property: string }
   | { kind: 'object'; properties: { key: string; value: SemanticExpr }[] }
   | { kind: 'array'; elements: (SemanticExpr | null)[] }
-  | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt' | number; args: SemanticExpr[]; binding: Binding; arity: number }
+  | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt'; args: SemanticExpr[]; binding: Binding; arity: number }
+  | { kind: 'call'; target: number; args: SemanticExpr[]; binding: Binding; arity: number; async: boolean }
+  | { kind: 'call'; target: 'queueMicrotask'; binding: Binding; callback: number; args: []; arity: 1 }
   | { kind: 'call'; target: 'array.push'; receiver: SemanticExpr; args: SemanticExpr[]; arity: number }
   | { kind: 'call'; target: 'object.hasOwn'; receiver: SemanticExpr; property: string; binding: Binding; args: []; arity: 2 }
 );
@@ -36,6 +39,6 @@ export type SemanticStatement = Node & (
   | { kind: 'return'; value: SemanticExpr }
 );
 export interface SemanticFunction extends Node {
-  instanceId: number; binding: Binding; params: Binding[]; body: SemanticStatement[]; returnTypes: TypeSet;
+  instanceId: number; binding: Binding; params: Binding[]; body: SemanticStatement[]; returnTypes: TypeSet; async: boolean;
 }
 export interface SemanticProgram { body: SemanticStatement[]; functions: SemanticFunction[] }

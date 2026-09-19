@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "ruleDbCommit": "35ca8d859f9352e90ee2497f4ac8f6edb9c19ed1",
+  "adapters": [
+    {
+      "ruleId": "async.await.non-promise-yield",
+      "sha256": "9b5049157dbcb224810659c742b7aa48974f550b6ffc1b1668c21722e5d4d1ec",
+      "selector": { "kind": "await.value" },
+      "lowering": "async.awaitValue"
+    },
+    {
+      "ruleId": "async.queue-microtask",
+      "sha256": "c73c220b0f3da276c5224a288046cad1e42da7701bf1d47b9b2405e70afa6260",
+      "selector": { "kind": "call.intrinsic", "intrinsic": "queueMicrotask" },
+      "lowering": "async.queueMicrotask"
+    }
+  ]
+}

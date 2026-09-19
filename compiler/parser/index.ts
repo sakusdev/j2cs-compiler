@@ -109,6 +109,7 @@ export function parse(source: string, file = 'input.js'): Program {
       if (n.questionDotToken || n.typeArguments?.length) unsupported(n, 'Optional/generic call');
       return { ...m, kind: 'call', callee: expr(n.expression), args: n.arguments.map(expr) };
     }
+    if (ts.isAwaitExpression(n)) return { ...m, kind: 'await', operand: expr(n.expression) };
     return unsupported(n);
   }
   function variables(list: ts.VariableDeclarationList): VariableStatement[] {
@@ -162,8 +163,11 @@ export function parse(source: string, file = 'input.js'): Program {
     }
     if (ts.isReturnStatement(n)) return [{ ...m, kind: 'return', value: n.expression && expr(n.expression) }];
     if (ts.isFunctionDeclaration(n)) {
-      if (!n.name || !n.body || n.asteriskToken || n.modifiers?.length || n.typeParameters?.length)
-        unsupported(n, 'Async/generator/ambient/exported/generic function');
+      const modifiers = n.modifiers ?? [];
+      const isAsync = modifiers.some(x => x.kind === ts.SyntaxKind.AsyncKeyword);
+      if (!n.name || !n.body || n.asteriskToken
+        || modifiers.some(x => x.kind !== ts.SyntaxKind.AsyncKeyword) || n.typeParameters?.length)
+        unsupported(n, 'Generator/ambient/exported/generic function');
       annotation(n.type);
       const params = n.parameters.map(p => {
         if (!ts.isIdentifier(p.name) || p.initializer || p.dotDotDotToken || p.questionToken || p.modifiers?.length)
@@ -172,7 +176,7 @@ export function parse(source: string, file = 'input.js'): Program {
         return { ...meta(p), name: p.name.text };
       });
       return [{ ...m, kind: 'function', name: n.name.text, params,
-        body: statement(n.body)[0] as Statement & { kind: 'block' } }];
+        body: statement(n.body)[0] as Statement & { kind: 'block' }, async: isAsync }];
     }
     return unsupported(n);
   }
