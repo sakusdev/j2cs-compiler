@@ -1,6 +1,7 @@
 import type { Binding } from '../analysis/bindings.js';
 import { isPrimitiveSet, Facts } from '../analysis/facts.js';
 import type { SemanticExpr, SemanticFunction } from '../ir/semantic.js';
+
 export function programFacts(): Facts {
   return new Facts()
     .prove('profile.host', 'Node.js', 'Explicit closed Node compiler profile')
@@ -38,23 +39,35 @@ function receiverFacts(f: Facts, e: SemanticExpr): void {
 export function expressionFacts(e: SemanticExpr): Facts {
   const f = programFacts().type('result', e.types, 'Flow-sensitive JavaScript value type analysis')
     .prove('operands.complete', true, 'Every admitted runtime value has an explicit JsValue tag/reference representation');
+
   if (e.kind === 'binary') {
     f.type('left', e.left.types, 'Left operand analysis before evaluation of right operand')
       .type('right', e.right.types, 'Right operand analysis')
       .prove('operands.domain', isPrimitiveSet(e.left.types) && isPrimitiveSet(e.right.types) ? 'primitive' : 'ecmascript-value',
         'Complete operand type sets determine whether ToPrimitive can be skipped');
+  } else if (e.kind === 'compound') {
+    f.type('left', e.leftTypes, 'Compound assignment GetValue before RHS evaluation')
+      .type('right', e.value.types, 'Compound assignment RHS analysis')
+      .prove('operands.domain', isPrimitiveSet(e.leftTypes) && isPrimitiveSet(e.value.types) ? 'primitive' : 'ecmascript-value',
+        'Compound operand type sets determine whether ToPrimitive can be skipped');
   } else if (e.kind === 'unary') {
     f.type('operand', e.operand.types, 'Unary operand analysis')
       .prove('operands.domain', isPrimitiveSet(e.operand.types) ? 'primitive' : 'ecmascript-value', 'Complete unary operand type set');
+  } else if (e.kind === 'update') {
+    f.type('operand', e.operandTypes, 'Update operand GetValue analysis')
+      .prove('operands.domain', isPrimitiveSet(e.operandTypes) ? 'primitive' : 'ecmascript-value', 'Complete update operand type set');
   } else {
     f.prove('operands.domain', isPrimitiveSet(e.types) ? 'primitive' : 'ecmascript-value', 'Result type domain');
   }
+
   if (e.kind === 'literal') {
     f.prove('ast.kind', e.value === null ? 'NullLiteral' : 'Literal', 'Normalized AST literal');
     if (typeof e.value === 'number' && Object.is(e.value, -0)) f.prove('constant.value', '-0', 'Literal signed zero');
   }
-  if (e.kind === 'read' || e.kind === 'assign' || (e.kind === 'call' && 'binding' in e)) bindingFacts(f, e.binding);
-  if (e.kind === 'assign') f.prove('reference.kind', 'mutable-lexical', 'Resolved writable initialized local/parameter');
+  if (e.kind === 'read' || e.kind === 'assign' || e.kind === 'compound' || e.kind === 'update' || (e.kind === 'call' && 'binding' in e))
+    bindingFacts(f, e.binding);
+  if (e.kind === 'assign' || e.kind === 'compound' || e.kind === 'update')
+    f.prove('reference.kind', 'mutable-lexical', 'Resolved writable initialized local/parameter');
   if (e.kind === 'call') {
     if (e.target === 'console') f.prove('member.integrity', 'pristine', 'Only direct resolved console.log calls, no intrinsic mutation/escape');
     else if (e.target === 'array.push') f.prove('member.integrity', 'pristine', 'Receiver has no own push property and Array prototype is pristine');
