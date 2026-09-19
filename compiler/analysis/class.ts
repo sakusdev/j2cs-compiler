@@ -10,10 +10,10 @@ const CLASS_RULES = {
   staticInheritance: { id: 'classes.static.field_inheritance', sha256: 'f27473aefbc1467b55305a558e960db176b20a61e26c12b48057795270f78409', lowering: 'JsClass.GetStatic/SetStatic' },
   extendsStatic: { id: 'classes.extends.static_base', sha256: '36ee16ec999b23c7b61f9d1f83288c62b2cd4fe40cd6870131f25812d52cdb93', lowering: 'class.extends.closed-world' },
   baseField: { id: 'classes.field.public_base_initializer_order', sha256: 'a82ff7b1b18c38ff3116b0a25655dcab4107c9b2f96e97e8875130f5a1c0498e', lowering: 'deferred.instance-field.base' },
-  derivedField: { id: 'classes.field.public_derived_initializer_order', sha256: 'c2ca6ea3bbe559921027b9c862acabb01d83bb5e1252103c68ebde7d58128326', lowering: 'deferred.instance-field.derived' },
-  derivedCtor: { id: 'classes.constructor.derived_super_first', sha256: '25c3f5abcc8a5d328048041afab5f9ee095bcd5ecb6334edeca875aeabb74c50', lowering: 'deferred.constructor.super' },
-  superInstance: { id: 'classes.super.instance_property', sha256: 'eadab2b0e0b25790908af52d81fea5d1fac18a3d3383745213bf6934cf5d7be7', lowering: 'deferred.JsSuper' },
-  superStatic: { id: 'classes.super.static_property', sha256: '1d077822fcd806544b27a80a0311256b17a35bf6cd3ef66010e94fed37dd314d', lowering: 'deferred.JsSuper.GetStatic' },
+  derivedField: { id: 'classes.field.public_derived_initializer_order', sha256: 'f46fa0ff6cd0dce2e50d78d0eb3789e8ef7841b8950538c1de6fb41c5383ad94', lowering: 'deferred.instance-field.derived' },
+  derivedCtor: { id: 'classes.constructor.derived_super_first', sha256: '5d401df285fffc94c2a2069ac3d14dfa3ca06a99ce604804f9ad704c96280057', lowering: 'deferred.constructor.super' },
+  superInstance: { id: 'classes.super.instance_property', sha256: '740af4191bc5783a57f3d7a6a92f062a2c64f712cb61f54d5d33b04841afe2ae', lowering: 'deferred.JsSuper' },
+  superStatic: { id: 'classes.super.static_property', sha256: '6cafcd79674f7d3008cade5f44b22936ba2699c7b60ed5e135183522b603c93e', lowering: 'deferred.JsSuper.GetStatic' },
 } as const;
 
 type ClassRuleKey = keyof typeof CLASS_RULES;
