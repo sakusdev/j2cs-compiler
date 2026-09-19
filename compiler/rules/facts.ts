@@ -45,6 +45,8 @@ export function expressionFacts(e: SemanticExpr): Facts {
       .type('right', e.right.types, 'Right operand analysis')
       .prove('operands.domain', isPrimitiveSet(e.left.types) && isPrimitiveSet(e.right.types) ? 'primitive' : 'ecmascript-value',
         'Complete operand type sets determine whether ToPrimitive can be skipped');
+    if (e.op === '==' || e.op === '!=')
+      f.prove('operator.semantic', e.op === '==' ? 'abstract equality' : 'abstract inequality', 'Normalized operator semantics');
   } else if (e.kind === 'compound') {
     f.type('left', e.leftTypes, 'Compound assignment GetValue before RHS evaluation')
       .type('right', e.value.types, 'Compound assignment RHS analysis')
@@ -52,7 +54,8 @@ export function expressionFacts(e: SemanticExpr): Facts {
         'Compound operand type sets determine whether ToPrimitive can be skipped');
   } else if (e.kind === 'unary') {
     f.type('operand', e.operand.types, 'Unary operand analysis')
-      .prove('operands.domain', isPrimitiveSet(e.operand.types) ? 'primitive' : 'ecmascript-value', 'Complete unary operand type set');
+      .prove('operands.domain', isPrimitiveSet(e.operand.types) ? 'primitive' : 'ecmascript-value', 'Complete unary operand type set')
+      .prove('operand.domain', isPrimitiveSet(e.operand.types) ? 'primitive' : 'ecmascript-value', 'Complete unary operand type set');
   } else if (e.kind === 'update') {
     f.type('operand', e.operandTypes, 'Update operand GetValue analysis')
       .prove('operands.domain', isPrimitiveSet(e.operandTypes) ? 'primitive' : 'ecmascript-value', 'Complete update operand type set');
@@ -73,8 +76,23 @@ export function expressionFacts(e: SemanticExpr): Facts {
     else if (e.target === 'array.push') f.prove('member.integrity', 'pristine', 'Receiver has no own push property and Array prototype is pristine');
     else if (e.target === 'object.hasOwn') f.prove('member.integrity', 'pristine', 'Direct unshadowed Object.hasOwn with static key')
       .prove('object.ownPropertyTest', true, 'JsObject/JsArray explicitly preserve own-property presence separately from undefined');
-    else { functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
-      .prove('function.parameterCount', e.arity, 'Resolved declaration signature'); }
+    else if (typeof e.target === 'number') {
+      functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
+        .prove('function.parameterCount', e.arity, 'Resolved declaration signature');
+    } else {
+      f.prove('call.argumentCount', e.args.length, 'AST intrinsic argument count');
+      const argument = e.args[0];
+      if (argument) f.type('argument', argument.types, 'Resolved first intrinsic argument type set')
+        .type('value', argument.types, 'Resolved first intrinsic argument type set')
+        .prove('argument.domain', isPrimitiveSet(argument.types) ? 'primitive' : 'ecmascript-value', 'Complete intrinsic argument domain')
+        .prove('value.domain', isPrimitiveSet(argument.types) ? 'primitive' : 'ecmascript-value', 'Complete intrinsic argument domain');
+      if (e.target === 'parseInt') {
+        f.prove('call.radixOmitted', e.args.length === 1, 'parseInt source arity');
+        const radix = e.args[1];
+        if (radix) f.type('radix', radix.types, 'Resolved parseInt radix type set')
+          .prove('radix.domain', isPrimitiveSet(radix.types) ? 'primitive' : 'ecmascript-value', 'Complete parseInt radix domain');
+      }
+    }
   }
   receiverFacts(f, e);
   return f;
