@@ -110,7 +110,8 @@ export function analyzeBundle(source: string, options: AnalyzeBundleOptions = {}
   const host = options.host ?? 'electron-renderer';
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, scriptKind(fileName));
   const shadowed = declaredNames(sourceFile);
-  const diagnostics: BundleDiagnostic[] = sourceFile.parseDiagnostics.map(diagnostic => ({
+  const parseDiagnostics = (sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [];
+  const diagnostics: BundleDiagnostic[] = parseDiagnostics.map(diagnostic => ({
     code: 'BUNDLE_PARSE',
     severity: 'error',
     message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
