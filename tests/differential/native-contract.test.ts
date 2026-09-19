@@ -79,5 +79,5 @@ test('Node planner vs C# NativeCompat route and contract traces', { timeout: 90_
   const csharp = await run(dotnet, [dll], ROOT);
   assert.equal(csharp.exit, 0);
   assert.equal(csharp.stderr, '');
-  assert.equal(csharp.stdout, expected);
+  assert.equal(csharp.stdout.replaceAll('\\r\\n', '\\n'), expected);
 });
