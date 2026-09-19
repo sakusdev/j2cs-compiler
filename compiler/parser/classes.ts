@@ -155,10 +155,11 @@ export function parseClassProgram(source: string, file = 'input.js'): ParsedClas
         const name = staticName(member.name), flags = scans(member.body);
         if (hasModifier(member, ts.SyntaxKind.StaticKeyword)) {
           if (member.parameters.length) unsupported(member, 'Static method parameters (argument semantics are owned by a sibling lane)');
-          if (member.body.statements.length !== 1 || !ts.isReturnStatement(member.body.statements[0])
-            || !member.body.statements[0].expression) unsupported(member, 'Static method body outside a single return expression');
+          const only = member.body.statements[0];
+          if (member.body.statements.length !== 1 || !only || !ts.isReturnStatement(only) || !only.expression)
+            unsupported(member, 'Static method body outside a single return expression');
           elements.push({ kind: 'staticMethod', name, params: [],
-            result: flags.usesThis || flags.usesSuper ? undefined : valueExpr(member.body.statements[0].expression),
+            result: flags.usesThis || flags.usesSuper ? undefined : valueExpr(only.expression),
             ...flags, span: span(member) });
         } else {
           elements.push({ kind: 'instanceMethod', name, ...flags, span: span(member) });
