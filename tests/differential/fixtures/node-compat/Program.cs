@@ -53,4 +53,14 @@ writable.On("drain", new NodeEventListener(_ =>
 }));
 writable.On("finish", new NodeEventListener(_ => Console.WriteLine("finish")));
 Console.WriteLine(Bool(NodeStreams.Write(writable, NodeStreamChunk.FromBuffer(NodeBuffer.From(new byte[] { 2 })))));
+
+var duplex = NodeStreams.CreateDuplex(
+    scheduler,
+    readableHighWaterMark: 1,
+    writableHighWaterMark: 7,
+    allowHalfOpen: false);
+Console.WriteLine($"{duplex.ReadableHighWaterMark} {duplex.WritableHighWaterMark} {Bool(duplex.AllowHalfOpen)}");
+Console.WriteLine(Bool(duplex.Push(NodeStreamChunk.FromBuffer(NodeBuffer.From(new byte[] { 3 })))));
+Console.WriteLine(duplex.Read()!.Value.Buffer.ToString("hex"));
+
 scheduler.Drain();
