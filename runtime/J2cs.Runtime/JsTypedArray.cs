@@ -156,9 +156,11 @@ public static class JsBinary
     public static JsBinaryValue TypedArraySetNumber(JsTypedArray array, JsBinaryValue index, JsBinaryValue value)
     {
         if (IsBigIntKind(array.Kind)) throw TypeError("Number-content TypedArray helper cannot target a BigInt TypedArray.");
+        // Integer-indexed [[Set]] coerces the RHS before the invalid/OOB index becomes a no-op.
+        // This matters for BigInt -> Number TypeError even when the element will not be stored.
+        double number = value.ToNumberPrimitive();
         if (!TryIntegerIndex(index, out int elementIndex) || array.Buffer.IsDetached || elementIndex >= array.LengthInternal)
             return value;
-        double number = value.ToNumberPrimitive();
         int byteIndex = checked(array.ByteOffsetInternal + elementIndex * BytesPerElement(array.Kind));
         WriteNumber(array.Kind, array.Buffer.MutableBytes().Slice(byteIndex, BytesPerElement(array.Kind)), number);
         return value;
@@ -167,9 +169,10 @@ public static class JsBinary
     public static JsBinaryValue TypedArraySetBigInt(JsTypedArray array, JsBinaryValue index, JsBinaryValue value)
     {
         if (!IsBigIntKind(array.Kind)) throw TypeError("BigInt-content TypedArray helper requires BigInt64Array/BigUint64Array.");
+        // ToBigInt is observable before an invalid/OOB/detached integer index is discarded.
+        JsBigInt bigint = JsBigInt.ToBigIntPrimitive(value);
         if (!TryIntegerIndex(index, out int elementIndex) || array.Buffer.IsDetached || elementIndex >= array.LengthInternal)
             return value;
-        JsBigInt bigint = JsBigInt.ToBigIntPrimitive(value);
         int byteIndex = checked(array.ByteOffsetInternal + elementIndex * 8);
         var bytes = array.Buffer.MutableBytes().Slice(byteIndex, 8);
         if (array.Kind == JsTypedArrayKind.BigInt64)
