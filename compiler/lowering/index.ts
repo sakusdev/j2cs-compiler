@@ -156,6 +156,31 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           if (op !== 'object.hasOwn') fail('E_LOWERING', 'Object.hasOwn adapter has no implementation.', e.span);
           return box(call('JsObject.HasOwn', [expression(e.receiver), stringLiteral(e.property)], 'boolean'));
         }
+        if (e.target === 'object.create') {
+          const op = select({ kind: 'object.create' }, facts, e.span);
+          if (op !== 'object.create') fail('E_LOWERING', 'Object.create adapter has no implementation.', e.span);
+          return call('JsObject.CreateWithPrototype', [expression(e.prototype)]);
+        }
+        if (e.target === 'object.getPrototypeOf') {
+          const op = select({ kind: 'object.getPrototypeOf' }, facts, e.span);
+          if (op !== 'object.getPrototypeOf') fail('E_LOWERING', 'Object.getPrototypeOf adapter has no implementation.', e.span);
+          return call('JsObject.GetPrototypeOf', [expression(e.receiver)]);
+        }
+        if (e.target === 'object.setPrototypeOf') {
+          const op = select({ kind: 'object.setPrototypeOf' }, facts, e.span);
+          if (op !== 'object.setPrototypeOf') fail('E_LOWERING', 'Object.setPrototypeOf adapter has no implementation.', e.span);
+          return call('JsObject.SetPrototypeOf', [expression(e.receiver), expression(e.prototype)]);
+        }
+        if (e.target === 'object.defineProperty') {
+          const op = select({ kind: 'object.defineProperty' }, facts, e.span);
+          if (op !== 'object.defineProperty') fail('E_LOWERING', 'Object.defineProperty adapter has no implementation.', e.span);
+          return call('JsObject.DefineProperty', [expression(e.receiver), stringLiteral(e.property), expression(e.descriptor)]);
+        }
+        if (e.target === 'object.getOwnPropertyDescriptor') {
+          const op = select({ kind: 'object.getOwnPropertyDescriptor' }, facts, e.span);
+          if (op !== 'object.getOwnPropertyDescriptor') fail('E_LOWERING', 'Object.getOwnPropertyDescriptor adapter has no implementation.', e.span);
+          return call('JsObject.GetOwnPropertyDescriptor', [expression(e.receiver), stringLiteral(e.property)]);
+        }
         if (typeof e.target === 'number') {
           select({ kind: 'call.function' }, facts, e.span);
           return call(`F${e.target}`, e.args.map(expression));

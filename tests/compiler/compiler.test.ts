@@ -36,6 +36,26 @@ test('object/array core selects canonical safe rules and preserves identity in e
   assert.match(r.source, /JsObject\.Create\(\)/); assert.match(r.source, /JsArray\.Create\(3d\)/);
   assert.ok(!/\bdynamic\b|\bobject\b/.test(r.source));
 });
+test('prototype and descriptor object operations connect to canonical runtime rules', () => {
+  const r = compile(`
+    const p={x:1}; const o=Object.create(p);
+    console.log(o.x,Object.hasOwn(o,'x'),Object.getPrototypeOf(o)===p);
+    o.x=2; console.log(o.x,p.x,Object.hasOwn(o,'x'));
+    Object.defineProperty(o,'locked',{value:7});
+    const d=Object.getOwnPropertyDescriptor(o,'locked');
+    console.log(d.value,d.writable,d.enumerable,d.configurable);
+    const n=Object.create(null); console.log(Object.getPrototypeOf(n)===null);
+    Object.setPrototypeOf(n,p); console.log(n.x,Object.getPrototypeOf(n)===p);
+  `, index);
+  const ids = new Set(r.trace.map(t => t.ruleId));
+  for (const id of ['object.create','object.define-property','object.get-own-property-descriptor',
+    'object.get-prototype-of','object.set-prototype-of'])
+    assert.ok(ids.has(id), `missing ${id}`);
+  assert.match(r.source, /JsObject\.CreateWithPrototype/);
+  assert.match(r.source, /JsObject\.DefineProperty/);
+  assert.match(r.source, /JsObject\.GetOwnPropertyDescriptor/);
+  assert.match(r.source, /JsObject\.SetPrototypeOf/);
+});
 test('parser normalizes classic loops and mutation operators', () => {
   const ast = parse('for (let i=0; i<2; i++) { while (false) { break; } }');
   assert.equal(ast.body[0]?.kind, 'for');
@@ -86,6 +106,13 @@ const diagnostics: [string, string, string][] = [
   ['prototype mutation', 'const x={}; x.__proto__={};', 'E_PROTOTYPE_MUTATION'],
   ['array length write', 'const x=[]; x.length=4;', 'E_ARRAY_LENGTH_WRITE'],
   ['array method override', 'const x=[]; x.push=1; x.push(2);', 'E_ARRAY_METHOD_OVERRIDDEN'],
+  ['default prototype observation', 'Object.getPrototypeOf({});', 'E_PROTOTYPE_UNMODELED'],
+  ['prototype cycle', 'const o={}; Object.setPrototypeOf(o,o);', 'E_PROTOTYPE_CYCLE'],
+  ['object create properties bag', "Object.create(null,{x:{value:1}});", 'E_OBJECT_CREATE_PROPERTIES'],
+  ['accessor descriptor dependency', "const o={}; Object.defineProperty(o,'x',{get:undefined});", 'E_ACCESSOR_FUNCTION_DEPENDENCY'],
+  ['non-writable descriptor assignment', "const o={}; Object.defineProperty(o,'x',{value:1}); o.x=2;", 'E_PROPERTY_WRITE_NONWRITABLE'],
+  ['fixed descriptor redefinition', "const o={}; Object.defineProperty(o,'x',{value:1}); Object.defineProperty(o,'x',{value:2});", 'E_DESCRIPTOR_INVARIANT_UNPROVEN'],
+  ['proxy boundary', 'const p=new Proxy({},{});', 'E_UNSUPPORTED_SYNTAX'],
   ['object coercing addition', "const x={}; console.log('x'+x);", 'E_NO_SAFE_RULE'],
   ['console object inspection', 'console.log({a:1});', 'E_CONSOLE_OBJECT'],
   ['object function boundary', 'function f(){ return {}; } f();', 'E_OBJECT_FUNCTION_BOUNDARY'],

@@ -18,6 +18,11 @@ export type SemanticExpr = Node & Typed & (
   | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt' | number; args: SemanticExpr[]; binding: Binding; arity: number }
   | { kind: 'call'; target: 'array.push'; receiver: SemanticExpr; args: SemanticExpr[]; arity: number }
   | { kind: 'call'; target: 'object.hasOwn'; receiver: SemanticExpr; property: string; binding: Binding; args: []; arity: 2 }
+  | { kind: 'call'; target: 'object.create'; prototype: SemanticExpr; binding: Binding; args: SemanticExpr[]; arity: 1 }
+  | { kind: 'call'; target: 'object.getPrototypeOf'; receiver: SemanticExpr; binding: Binding; args: SemanticExpr[]; arity: 1 }
+  | { kind: 'call'; target: 'object.setPrototypeOf'; receiver: SemanticExpr; prototype: SemanticExpr; binding: Binding; args: SemanticExpr[]; arity: 2 }
+  | { kind: 'call'; target: 'object.defineProperty'; receiver: SemanticExpr; property: string; descriptor: SemanticExpr; binding: Binding; args: SemanticExpr[]; arity: 3 }
+  | { kind: 'call'; target: 'object.getOwnPropertyDescriptor'; receiver: SemanticExpr; property: string; binding: Binding; args: SemanticExpr[]; arity: 2 }
 );
 export type SemanticForInitializer = Node & (
   | { kind: 'variables'; declarations: (SemanticStatement & { kind: 'variable' })[] }

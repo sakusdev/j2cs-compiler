@@ -67,6 +67,16 @@ const fixtures: Fixture[] = [
     console.log(a.push(6,undefined),a.length,Object.hasOwn(a,6),a[5],a[6]===undefined);
     console.log(a===a,a===[]); console.log(!a); if(a) console.log('array-truthy');
   ` },
+  { name: 'object-prototypes-descriptors', source: `
+    const p={x:1}; const o=Object.create(p);
+    console.log(o.x,Object.hasOwn(o,'x'),Object.getPrototypeOf(o)===p);
+    o.x=2; console.log(o.x,p.x,Object.hasOwn(o,'x'));
+    Object.defineProperty(o,'locked',{value:7});
+    const d=Object.getOwnPropertyDescriptor(o,'locked');
+    console.log(d.value,d.writable,d.enumerable,d.configurable);
+    const n=Object.create(null); console.log(Object.getPrototypeOf(n)===null);
+    Object.setPrototypeOf(n,p); console.log(n.x,Object.getPrototypeOf(n)===p);
+  ` },
   { name: 'functions-and-returns', source: `
     console.log(add(10, 20));
     function add(a, b) { return a + b; }
@@ -169,6 +179,11 @@ for (const fixture of fixtures) {
       assert.ok(r.result.trace.some(t => t.ruleId === 'array.length.read'));
       assert.ok(r.result.trace.some(t => t.ruleId === 'array.prototype.push'));
       assert.ok(r.result.trace.some(t => t.ruleId === 'object.has-own'));
+    }
+    if (fixture.name === 'object-prototypes-descriptors') {
+      for (const id of ['object.create','object.define-property','object.get-own-property-descriptor',
+        'object.get-prototype-of','object.set-prototype-of'])
+        assert.ok(r.result.trace.some(t => t.ruleId === id), `missing ${id}`);
     }
   });
 }

@@ -26,8 +26,10 @@ function functionFacts(f: Facts): void {
     .prove('function.parameters', 'simple', 'Parser rejects default/rest/optional/destructured parameters');
 }
 function receiverFacts(f: Facts, e: SemanticExpr): void {
-  if (e.kind !== 'member' && !(e.kind === 'call' && (e.target === 'array.push' || e.target === 'object.hasOwn'))) return;
-  const receiver = e.kind === 'member' ? e.object : e.receiver;
+  let receiver: SemanticExpr | undefined;
+  if (e.kind === 'member') receiver = e.object;
+  else if (e.kind === 'call' && 'receiver' in e) receiver = e.receiver;
+  if (!receiver) return;
   f.type('receiver', receiver.types, 'Flow-sensitive receiver type and compiler-owned reference tracking')
     .prove('receiver.proxy', false, 'No Proxy construction or external object ingress is admitted')
     .prove('object.representation', 'JsObject', 'Compiler-owned Object/Array references use JsObject/JsArray runtime storage');
@@ -74,9 +76,12 @@ export function expressionFacts(e: SemanticExpr): Facts {
   if (e.kind === 'call') {
     if (e.target === 'console') f.prove('member.integrity', 'pristine', 'Only direct resolved console.log calls, no intrinsic mutation/escape');
     else if (e.target === 'array.push') f.prove('member.integrity', 'pristine', 'Receiver has no own push property and Array prototype is pristine');
-    else if (e.target === 'object.hasOwn') f.prove('member.integrity', 'pristine', 'Direct unshadowed Object.hasOwn with static key')
-      .prove('object.ownPropertyTest', true, 'JsObject/JsArray explicitly preserve own-property presence separately from undefined');
-    else if (typeof e.target === 'number') {
+    else if (typeof e.target === 'string' && e.target.startsWith('object.')) {
+      f.prove('member.integrity', 'pristine', 'Direct unshadowed Object intrinsic with compiler-owned operands')
+        .prove('call.argumentCount', e.arity, 'Normalized Object intrinsic arity');
+      if (e.target === 'object.hasOwn')
+        f.prove('object.ownPropertyTest', true, 'JsObject/JsArray explicitly preserve own-property presence separately from undefined');
+    } else if (typeof e.target === 'number') {
       functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
         .prove('function.parameterCount', e.arity, 'Resolved declaration signature');
     } else {

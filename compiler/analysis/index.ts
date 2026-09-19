@@ -5,13 +5,28 @@ import { type Binding, type Bindings } from './bindings.js';
 import { exactly, hasReference, literalType, union, type TypeSet } from './facts.js';
 
 interface ValueInfo { types: TypeSet; refs?: readonly number[] }
-interface Shape { kind: 'Object' | 'Array'; properties: Map<string, ValueInfo>; length?: number }
+interface PropertyShape {
+  value: ValueInfo;
+  writable: boolean | undefined;
+  enumerable: boolean | undefined;
+  configurable: boolean | undefined;
+}
+interface PrototypeShape { refs: readonly number[]; includesNull: boolean; opaqueDefault: boolean }
+interface Shape {
+  kind: 'Object' | 'Array';
+  properties: Map<string, PropertyShape>;
+  prototype: PrototypeShape;
+  length?: number;
+}
 type Environment = Map<number, ValueInfo>;
 interface Flow { env: Environment; heap: Map<number, Shape>; reachable: boolean; returns: TypeSet[]; loopDepth: number }
 interface State { env: Environment; heap: Map<number, Shape> }
 interface LoopControl { breaks: State[]; continues: State[] }
 const MAX_LOOP_FIXPOINT = 16;
 const UNDEFINED: ValueInfo = { types: ['Undefined'] };
+const ordinaryProperty = (value: ValueInfo): PropertyShape =>
+  ({ value, writable: true, enumerable: true, configurable: true });
+const opaqueDefaultPrototype = (): PrototypeShape => ({ refs: [], includesNull: false, opaqueDefault: true });
 const objectPrototypeKeys = new Set(['__proto__', 'constructor', 'hasOwnProperty', 'isPrototypeOf',
   'propertyIsEnumerable', 'toLocaleString', 'toString', 'valueOf', '__defineGetter__', '__defineSetter__',
   '__lookupGetter__', '__lookupSetter__']);
@@ -37,9 +52,19 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   function cloneEnv(env: Environment): Environment {
     return new Map([...env].map(([id, v]) => [id, cloneValue(v)]));
   }
+  function cloneProperty(p: PropertyShape): PropertyShape {
+    return { value: cloneValue(p.value), writable: p.writable, enumerable: p.enumerable, configurable: p.configurable };
+  }
+  function clonePrototype(p: PrototypeShape): PrototypeShape {
+    return { refs: [...p.refs], includesNull: p.includesNull, opaqueDefault: p.opaqueDefault };
+  }
   function cloneHeap(heap: Map<number, Shape>): Map<number, Shape> {
-    return new Map([...heap].map(([id, s]) => [id, { kind: s.kind, length: s.length,
-      properties: new Map([...s.properties].map(([k, v]) => [k, cloneValue(v)])) }]));
+    return new Map([...heap].map(([id, shape]) => [id, {
+      kind: shape.kind,
+      length: shape.length,
+      prototype: clonePrototype(shape.prototype),
+      properties: new Map([...shape.properties].map(([k, p]) => [k, cloneProperty(p)])),
+    }]));
   }
   function stateOf(f: Flow): State { return { env: cloneEnv(f.env), heap: cloneHeap(f.heap) }; }
   function joinEnv(template: Environment, paths: Environment[]): Environment {
@@ -57,13 +82,28 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     for (const id of ids) {
       const shapes = paths.map(p => p.get(id)).filter((x): x is Shape => x !== undefined);
       if (!shapes.length) continue;
-      const properties = new Map<string, ValueInfo>();
-      const keys = new Set<string>(shapes.flatMap(s => [...s.properties.keys()]));
-      for (const key of keys)
-        properties.set(key, unionValue(...shapes.map(s => s.properties.get(key) ?? UNDEFINED)));
-      const lengths = shapes.map(s => s.length);
+      const properties = new Map<string, PropertyShape>();
+      const keys = new Set<string>(shapes.flatMap(shape => [...shape.properties.keys()]));
+      for (const key of keys) {
+        const present = shapes.map(shape => shape.properties.get(key));
+        const first = present[0];
+        const attr = (name: 'writable' | 'enumerable' | 'configurable'): boolean | undefined =>
+          first && present.every(p => p && p[name] === first[name]) ? first[name] : undefined;
+        properties.set(key, {
+          value: unionValue(...present.map(p => p?.value ?? UNDEFINED)),
+          writable: attr('writable'),
+          enumerable: attr('enumerable'),
+          configurable: attr('configurable'),
+        });
+      }
+      const lengths = shapes.map(shape => shape.length);
       const length = lengths.every(x => x === lengths[0]) ? lengths[0] : undefined;
-      result.set(id, { kind: shapes[0]!.kind, length, properties });
+      const prototype: PrototypeShape = {
+        refs: [...new Set(shapes.flatMap(shape => [...shape.prototype.refs]))].sort((a, b) => a - b),
+        includesNull: shapes.some(shape => shape.prototype.includesNull),
+        opaqueDefault: shapes.some(shape => shape.prototype.opaqueDefault),
+      };
+      result.set(id, { kind: shapes[0]!.kind, length, properties, prototype });
     }
     return result;
   }
@@ -85,8 +125,16 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   function sameHeap(a: Map<number, Shape>, b: Map<number, Shape>): boolean {
     if (a.size !== b.size) return false;
     for (const [id, x] of a) {
-      const y=b.get(id); if (!y || x.kind!==y.kind || x.length!==y.length || x.properties.size!==y.properties.size) return false;
-      for (const [k,v] of x.properties) { const w=y.properties.get(k); if(!w || !sameValue(v,w)) return false; }
+      const y=b.get(id);
+      if (!y || x.kind!==y.kind || x.length!==y.length || x.properties.size!==y.properties.size
+        || x.prototype.includesNull!==y.prototype.includesNull || x.prototype.opaqueDefault!==y.prototype.opaqueDefault
+        || x.prototype.refs.length!==y.prototype.refs.length
+        || x.prototype.refs.some((r,i)=>r!==y.prototype.refs[i])) return false;
+      for (const [k,v] of x.properties) {
+        const w=y.properties.get(k);
+        if(!w || !sameValue(v.value,w.value) || v.writable!==w.writable
+          || v.enumerable!==w.enumerable || v.configurable!==w.configurable) return false;
+      }
     }
     return true;
   }
@@ -115,32 +163,178 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     for (const ref of value.refs) if (!f.heap.has(ref)) fail('E_PROPERTY_FLOW', 'Object identity escaped the analyzable heap.', value.span);
     return value.refs;
   }
-  function ownRead(receiver: SE, property: string, f: Flow): ValueInfo {
-    const refs = requireReference(receiver, f, 'Property read');
+  function defaultPrototypeMayContain(shape: Shape, property: string): boolean {
+    return property === '__proto__' || objectPrototypeKeys.has(property)
+      || (shape.kind === 'Array' && arrayPrototypeKeys.has(property));
+  }
+  function readFromShape(ref: number, property: string, f: Flow, span: Node['span'], seen: Set<number>): ValueInfo {
+    if (seen.has(ref)) return fail('E_PROTOTYPE_CYCLE', 'Prototype cycle reached during property analysis.', span);
+    const nextSeen = new Set(seen); nextSeen.add(ref);
+    const shape = f.heap.get(ref)!;
+    const own = shape.properties.get(property);
+    if (own) return own.value;
     const values: ValueInfo[] = [];
-    for (const ref of refs) {
-      const shape = f.heap.get(ref)!;
-      const own = shape.properties.get(property);
-      if (own) { values.push(own); continue; }
-      if (property === '__proto__' || objectPrototypeKeys.has(property) || (shape.kind === 'Array' && arrayPrototypeKeys.has(property)))
-        fail('E_PROTOTYPE_PROPERTY', `Property '${property}' may resolve through an unimplemented prototype.`, receiver.span);
+    for (const prototypeRef of shape.prototype.refs)
+      values.push(readFromShape(prototypeRef, property, f, span, nextSeen));
+    if (shape.prototype.opaqueDefault) {
+      if (defaultPrototypeMayContain(shape, property))
+        fail('E_PROTOTYPE_PROPERTY', `Property '${property}' may resolve through an unmaterialized builtin prototype.`, span);
       values.push(UNDEFINED);
     }
-    return unionValue(...values);
+    if (shape.prototype.includesNull) values.push(UNDEFINED);
+    return values.length ? unionValue(...values) : UNDEFINED;
+  }
+  function ownRead(receiver: SE, property: string, f: Flow): ValueInfo {
+    return unionValue(...requireReference(receiver, f, 'Property read')
+      .map(ref => readFromShape(ref, property, f, receiver.span, new Set())));
+  }
+  function inheritedDescriptors(shape: Shape, property: string, f: Flow, span: Node['span'], seen: Set<number>): PropertyShape[] {
+    const result: PropertyShape[] = [];
+    for (const prototypeRef of shape.prototype.refs) {
+      if (seen.has(prototypeRef)) fail('E_PROTOTYPE_CYCLE', 'Prototype cycle reached during property write analysis.', span);
+      const nextSeen = new Set(seen); nextSeen.add(prototypeRef);
+      const prototype = f.heap.get(prototypeRef)!;
+      const own = prototype.properties.get(property);
+      if (own) result.push(own);
+      else result.push(...inheritedDescriptors(prototype, property, f, span, nextSeen));
+    }
+    if (shape.prototype.opaqueDefault && defaultPrototypeMayContain(shape, property))
+      fail('E_PROTOTYPE_WRITE_UNMODELED', `Property '${property}' may resolve through an unmaterialized builtin prototype.`, span);
+    return result;
   }
   function setOwn(receiver: SE, property: string, value: ValueInfo, f: Flow): void {
     const refs = requireReference(receiver, f, 'Property write');
-    if (property === '__proto__') fail('E_PROTOTYPE_MUTATION', '__proto__ assignment requires prototype-setter semantics.', receiver.span);
+    if (property === '__proto__') fail('E_PROTOTYPE_MUTATION', '__proto__ assignment is deferred; use Object.setPrototypeOf in the supported profile.', receiver.span);
     for (const ref of refs) {
       const shape = f.heap.get(ref)!;
       if (shape.kind === 'Array' && property === 'length')
         fail('E_ARRAY_LENGTH_WRITE', 'Direct Array length writes are deferred until full ArraySetLength semantics are implemented.', receiver.span);
-      shape.properties.set(property, value);
+      const own = shape.properties.get(property);
+      if (own) {
+        if (own.writable !== true)
+          fail('E_PROPERTY_WRITE_NONWRITABLE', `Property '${property}' is not proven writable.`, receiver.span);
+        own.value = value;
+      } else {
+        const inherited = inheritedDescriptors(shape, property, f, receiver.span, new Set([ref]));
+        if (inherited.some(p => p.writable !== true))
+          fail('E_PROPERTY_WRITE_NONWRITABLE', `Inherited property '${property}' is not proven writable.`, receiver.span);
+        shape.properties.set(property, ordinaryProperty(value));
+      }
       if (shape.kind === 'Array' && shape.length !== undefined && /^(?:0|[1-9]\d*)$/.test(property)) {
         const index = Number(property);
         if (Number.isSafeInteger(index) && index >= 0 && index <= 0xffff_fffe) shape.length = Math.max(shape.length, index + 1);
       }
     }
+  }
+  function prototypeFromValue(value: SE, f: Flow, operation: string): PrototypeShape {
+    const allowed = value.types.every(type => type === 'Object' || type === 'Array' || type === 'Null');
+    if (!allowed || (!value.types.includes('Null') && !value.refs?.length))
+      fail('E_PROTOTYPE_VALUE', `${operation} requires an Object or null prototype.`, value.span);
+    if (value.refs) for (const ref of value.refs)
+      if (!f.heap.has(ref)) fail('E_PROPERTY_FLOW', 'Prototype identity escaped the analyzable heap.', value.span);
+    return {
+      refs: [...new Set(value.refs ?? [])].sort((a,b)=>a-b),
+      includesNull: value.types.includes('Null'),
+      opaqueDefault: false,
+    };
+  }
+  function prototypeReaches(start: number, target: number, f: Flow, seen = new Set<number>()): boolean {
+    if (start === target) return true;
+    if (seen.has(start)) return false;
+    seen.add(start);
+    const shape = f.heap.get(start)!;
+    return shape.prototype.refs.some(ref => prototypeReaches(ref, target, f, seen));
+  }
+  function setPrototype(receiver: SE, prototype: SE, f: Flow): void {
+    const refs = requireReference(receiver, f, 'Object.setPrototypeOf');
+    const next = prototypeFromValue(prototype, f, 'Object.setPrototypeOf');
+    for (const ref of refs) {
+      const shape = f.heap.get(ref)!;
+      if (shape.kind !== 'Object')
+        fail('E_ARRAY_PROTOTYPE_MUTATION', 'Array prototype mutation is deferred to the array/exotic-object lanes.', receiver.span);
+      if (next.refs.some(prototypeRef => prototypeReaches(prototypeRef, ref, f)))
+        fail('E_PROTOTYPE_CYCLE', 'Object.setPrototypeOf would create a prototype cycle.', prototype.span);
+      shape.prototype = clonePrototype(next);
+    }
+  }
+  function getPrototypeValue(receiver: SE, f: Flow): ValueInfo {
+    const refs = requireReference(receiver, f, 'Object.getPrototypeOf');
+    const prototypes = refs.map(ref => f.heap.get(ref)!.prototype);
+    if (prototypes.some(p => p.opaqueDefault))
+      fail('E_PROTOTYPE_UNMODELED', 'The builtin Object/Array prototype is intentionally unmaterialized in this compiler profile.', receiver.span);
+    const prototypeRefs = [...new Set(prototypes.flatMap(p => [...p.refs]))].sort((a,b)=>a-b);
+    const typeSets: TypeSet[] = [];
+    if (prototypeRefs.length)
+      typeSets.push(union(...prototypeRefs.map(ref => [f.heap.get(ref)!.kind] as TypeSet)));
+    if (prototypes.some(p => p.includesNull)) typeSets.push(['Null']);
+    return { types: union(...typeSets), ...(prototypeRefs.length ? { refs: prototypeRefs } : {}) };
+  }
+  interface DataDescriptorSpec {
+    hasValue: boolean; value: ValueInfo;
+    writable?: boolean; enumerable?: boolean; configurable?: boolean;
+  }
+  function descriptorSpec(descriptor: SE): DataDescriptorSpec {
+    if (descriptor.kind !== 'object')
+      return fail('E_DESCRIPTOR_SHAPE', 'Object.defineProperty currently requires a direct ordinary object-literal descriptor.', descriptor.span);
+    const fields = new Map(descriptor.properties.map(property => [property.key, property.value]));
+    if (fields.has('get') || fields.has('set'))
+      fail('E_ACCESSOR_FUNCTION_DEPENDENCY', 'Getter/setter descriptors require callable function values from the unmerged function runtime lane.', descriptor.span);
+    const flag = (name: 'writable' | 'enumerable' | 'configurable'): boolean | undefined => {
+      const field = fields.get(name);
+      if (!field) return undefined;
+      if (field.kind !== 'literal' || typeof field.value !== 'boolean')
+        return fail('E_DESCRIPTOR_FLAG_PROOF', `Descriptor field '${name}' currently requires a Boolean literal for static invariant proof.`, field.span);
+      return field.value;
+    };
+    const value = fields.get('value');
+    return {
+      hasValue: value !== undefined,
+      value: value ? valueOf(value) : UNDEFINED,
+      writable: flag('writable'),
+      enumerable: flag('enumerable'),
+      configurable: flag('configurable'),
+    };
+  }
+  function applyDataDescriptor(receiver: SE, property: string, spec: DataDescriptorSpec, f: Flow): void {
+    for (const ref of requireReference(receiver, f, 'Object.defineProperty')) {
+      const shape = f.heap.get(ref)!;
+      if (shape.kind !== 'Object')
+        fail('E_ARRAY_DESCRIPTOR_UNSUPPORTED', 'Array descriptor mutation requires ArraySetLength/index invariants and is deferred.', receiver.span);
+      const current = shape.properties.get(property);
+      if (!current) {
+        shape.properties.set(property, {
+          value: spec.hasValue ? spec.value : UNDEFINED,
+          writable: spec.writable ?? false,
+          enumerable: spec.enumerable ?? false,
+          configurable: spec.configurable ?? false,
+        });
+        continue;
+      }
+      if (current.writable === undefined || current.enumerable === undefined || current.configurable === undefined)
+        fail('E_DESCRIPTOR_INVARIANT_UNPROVEN', 'Joined control flow made descriptor attributes ambiguous.', receiver.span);
+      if (!current.configurable) {
+        if (spec.configurable === true || (spec.enumerable !== undefined && spec.enumerable !== current.enumerable))
+          fail('E_DESCRIPTOR_INCOMPATIBLE', 'Descriptor redefinition violates non-configurable property invariants.', receiver.span);
+        if (!current.writable) {
+          if (spec.writable === true) fail('E_DESCRIPTOR_INCOMPATIBLE', 'A non-configurable non-writable property cannot become writable.', receiver.span);
+          if (spec.hasValue)
+            fail('E_DESCRIPTOR_INVARIANT_UNPROVEN', 'SameValue proof for redefining a fixed data property is not available in this lane.', receiver.span);
+        }
+      }
+      if (spec.hasValue) current.value = spec.value;
+      if (spec.writable !== undefined) current.writable = spec.writable;
+      if (spec.enumerable !== undefined) current.enumerable = spec.enumerable;
+      if (spec.configurable !== undefined) current.configurable = spec.configurable;
+    }
+  }
+  function ownDescriptor(receiver: SE, property: string, f: Flow): PropertyShape | undefined {
+    const refs = requireReference(receiver, f, 'Object.getOwnPropertyDescriptor');
+    if (refs.length !== 1)
+      fail('E_DESCRIPTOR_ALIAS_UNPROVEN', 'Descriptor observation requires one proven receiver identity.', receiver.span);
+    const shape = f.heap.get(refs[0]!)!;
+    if (shape.kind !== 'Object')
+      fail('E_ARRAY_DESCRIPTOR_UNSUPPORTED', 'Array descriptor observation is deferred to the array/exotic-object lanes.', receiver.span);
+    return shape.properties.get(property);
   }
   function instantiate(b: Binding, args: SE[], callNode: Node): SemanticFunction {
     const fn = b.function!;
@@ -168,21 +362,21 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       case 'object': {
         if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
         if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Object allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
-        const ref = n.id, shape: Shape = { kind: 'Object', properties: new Map() };
+        const ref = n.id, shape: Shape = { kind: 'Object', properties: new Map(), prototype: opaqueDefaultPrototype() };
         f.heap.set(ref, shape);
         const properties = n.properties.map(p => {
-          const value = expression(p.value, f); shape.properties.set(p.key, valueOf(value)); return { key: p.key, value };
+          const value = expression(p.value, f); shape.properties.set(p.key, ordinaryProperty(valueOf(value))); return { key: p.key, value };
         });
         return { ...n, kind: 'object', properties, types: ['Object'], refs: [ref] };
       }
       case 'array': {
         if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Array literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
         if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Array allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
-        const ref = n.id, shape: Shape = { kind: 'Array', length: n.elements.length, properties: new Map() };
+        const ref = n.id, shape: Shape = { kind: 'Array', length: n.elements.length, properties: new Map(), prototype: opaqueDefaultPrototype() };
         f.heap.set(ref, shape);
         const elements = n.elements.map((e, i) => {
           if (!e) return null;
-          const value = expression(e, f); shape.properties.set(String(i), valueOf(value)); return value;
+          const value = expression(e, f); shape.properties.set(String(i), ordinaryProperty(valueOf(value))); return value;
         });
         return { ...n, kind: 'array', elements, types: ['Array'], refs: [ref] };
       }
@@ -247,14 +441,75 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
               }
               return { ...n, kind: 'call', target: 'console', binding, args, arity: args.length, types: ['Undefined'] };
             }
-            if (binding?.kind === 'intrinsic' && binding.name === 'Object' && n.callee.property === 'hasOwn') {
-              if (n.args.length !== 2) fail('E_ARITY', 'Object.hasOwn is supported only with exactly two arguments.', n.span);
-              const receiver = expression(n.args[0]!, f); requireReference(receiver, f, 'Object.hasOwn');
-              const key = n.args[1]!;
-              if (key.kind !== 'literal' || (typeof key.value !== 'string' && typeof key.value !== 'number'))
-                fail('E_PROPERTY_KEY_COERCION', 'Object.hasOwn currently requires a static String/Number key; general ToPropertyKey is deferred.', key.span);
-              return { ...n, kind: 'call', target: 'object.hasOwn', binding, receiver,
-                property: typeof key.value === 'number' ? String(key.value) : key.value, args: [], arity: 2, types: ['Boolean'] };
+            if (binding?.kind === 'intrinsic' && binding.name === 'Object') {
+              const staticKey = (key: Expr): string => {
+                if (key.kind !== 'literal' || (typeof key.value !== 'string' && typeof key.value !== 'number'))
+                  return fail('E_PROPERTY_KEY_COERCION', 'This Object operation currently requires a static String/Number key; general ToPropertyKey is deferred.', key.span);
+                return typeof key.value === 'number' ? String(key.value) : key.value;
+              };
+              if (n.callee.property === 'hasOwn') {
+                if (n.args.length !== 2) fail('E_ARITY', 'Object.hasOwn is supported only with exactly two arguments.', n.span);
+                const receiver = expression(n.args[0]!, f); requireReference(receiver, f, 'Object.hasOwn');
+                return { ...n, kind: 'call', target: 'object.hasOwn', binding, receiver,
+                  property: staticKey(n.args[1]!), args: [], arity: 2, types: ['Boolean'] };
+              }
+              if (n.callee.property === 'create') {
+                if (n.args.length === 2)
+                  fail('E_OBJECT_CREATE_PROPERTIES', 'Object.create properties descriptors are deferred; define properties explicitly after creation.', n.span);
+                if (n.args.length !== 1) fail('E_ARITY', 'Object.create is currently supported with exactly one prototype argument.', n.span);
+                if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object allocation inside specialized functions is deferred.', n.span);
+                if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Object allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
+                const prototype = expression(n.args[0]!, f);
+                const prototypeShape = prototypeFromValue(prototype, f, 'Object.create');
+                const ref = n.id;
+                f.heap.set(ref, { kind: 'Object', properties: new Map(), prototype: clonePrototype(prototypeShape) });
+                return { ...n, kind: 'call', target: 'object.create', binding, prototype, args: [prototype],
+                  arity: 1, types: ['Object'], refs: [ref] };
+              }
+              if (n.callee.property === 'setPrototypeOf') {
+                if (n.args.length !== 2) fail('E_ARITY', 'Object.setPrototypeOf is supported only with exactly two arguments.', n.span);
+                const receiver = expression(n.args[0]!, f), prototype = expression(n.args[1]!, f);
+                setPrototype(receiver, prototype, f);
+                return withValue({ ...n, kind: 'call' as const, target: 'object.setPrototypeOf' as const,
+                  binding, receiver, prototype, args: [receiver, prototype], arity: 2 }, valueOf(receiver));
+              }
+              if (n.callee.property === 'getPrototypeOf') {
+                if (n.args.length !== 1) fail('E_ARITY', 'Object.getPrototypeOf is supported only with exactly one argument.', n.span);
+                const receiver = expression(n.args[0]!, f), value = getPrototypeValue(receiver, f);
+                return withValue({ ...n, kind: 'call' as const, target: 'object.getPrototypeOf' as const,
+                  binding, receiver, args: [receiver], arity: 1 }, value);
+              }
+              if (n.callee.property === 'defineProperty') {
+                if (n.args.length !== 3) fail('E_ARITY', 'Object.defineProperty is supported only with exactly three arguments.', n.span);
+                const receiver = expression(n.args[0]!, f);
+                const property = staticKey(n.args[1]!);
+                const descriptor = expression(n.args[2]!, f);
+                const spec = descriptorSpec(descriptor);
+                applyDataDescriptor(receiver, property, spec, f);
+                return withValue({ ...n, kind: 'call' as const, target: 'object.defineProperty' as const,
+                  binding, receiver, property, descriptor, args: [receiver, descriptor], arity: 3 }, valueOf(receiver));
+              }
+              if (n.callee.property === 'getOwnPropertyDescriptor') {
+                if (n.args.length !== 2) fail('E_ARITY', 'Object.getOwnPropertyDescriptor is supported only with exactly two arguments.', n.span);
+                if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Descriptor object allocation inside specialized functions is deferred.', n.span);
+                if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Descriptor object allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
+                const receiver = expression(n.args[0]!, f), property = staticKey(n.args[1]!);
+                const descriptor = ownDescriptor(receiver, property, f);
+                if (!descriptor)
+                  return { ...n, kind: 'call', target: 'object.getOwnPropertyDescriptor', binding, receiver,
+                    property, args: [receiver], arity: 2, types: ['Undefined'] };
+                if (descriptor.writable === undefined || descriptor.enumerable === undefined || descriptor.configurable === undefined)
+                  fail('E_DESCRIPTOR_INVARIANT_UNPROVEN', 'Descriptor attributes are ambiguous after control-flow join.', n.span);
+                const ref = n.id;
+                f.heap.set(ref, { kind: 'Object', prototype: opaqueDefaultPrototype(), properties: new Map([
+                  ['value', ordinaryProperty(descriptor.value)],
+                  ['writable', ordinaryProperty({ types: ['Boolean'] })],
+                  ['enumerable', ordinaryProperty({ types: ['Boolean'] })],
+                  ['configurable', ordinaryProperty({ types: ['Boolean'] })],
+                ]) });
+                return { ...n, kind: 'call', target: 'object.getOwnPropertyDescriptor', binding, receiver,
+                  property, args: [receiver], arity: 2, types: ['Object'], refs: [ref] };
+              }
             }
           }
           if (n.callee.property === 'push') {
@@ -268,7 +523,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
               const shape = f.heap.get(ref)!;
               if (shape.length !== undefined) {
                 let index = shape.length;
-                for (const arg of args) shape.properties.set(String(index++), valueOf(arg));
+                for (const arg of args) shape.properties.set(String(index++), ordinaryProperty(valueOf(arg)));
                 shape.length = index;
               }
             }

@@ -734,6 +734,46 @@
           "equals": "primitive"
         }
       ]
+    },
+    {
+      "ruleId": "object.create",
+      "sha256": "54a4b660fb48c726398f996c160633bb99318204da07adfd8e0d269da54c1cb1",
+      "selector": {
+        "kind": "object.create"
+      },
+      "lowering": "object.create"
+    },
+    {
+      "ruleId": "object.define-property",
+      "sha256": "ecb0a39932bd751cb89f38da09e4c24ee3ef44a64c67a54597e2434383769a93",
+      "selector": {
+        "kind": "object.defineProperty"
+      },
+      "lowering": "object.defineProperty"
+    },
+    {
+      "ruleId": "object.get-own-property-descriptor",
+      "sha256": "4b256e3ae9808c48ca617557d3d4d3159a1fd90b4946741b174f8e0c70766149",
+      "selector": {
+        "kind": "object.getOwnPropertyDescriptor"
+      },
+      "lowering": "object.getOwnPropertyDescriptor"
+    },
+    {
+      "ruleId": "object.get-prototype-of",
+      "sha256": "ad9e3a76f19686a3770c90a66bf30ac929dcc2b8185776396423b6d6c0f6678e",
+      "selector": {
+        "kind": "object.getPrototypeOf"
+      },
+      "lowering": "object.getPrototypeOf"
+    },
+    {
+      "ruleId": "object.set-prototype-of",
+      "sha256": "227cac5d620900bb43a23e5eee2050dad2917b673149f5495883f6f22e394e95",
+      "selector": {
+        "kind": "object.setPrototypeOf"
+      },
+      "lowering": "object.setPrototypeOf"
     }
   ]
 }
