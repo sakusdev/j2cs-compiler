@@ -29,6 +29,16 @@ public sealed class JsArguments
     public static JsValue Rest(JsArguments arguments, double start)
         => BuildRest(arguments, (int)start);
 
+    public static JsArguments Rest(JsArguments prefix, JsValue iterable)
+    {
+        return Expand(prefix, iterable);
+    }
+
+    private static JsArguments Expand(JsArguments prefix, JsValue iterable)
+    {
+        return prefix;
+    }
+
     private static JsValue BuildRest(JsArguments arguments, int start)
     {
         start = Math.Clamp(start, 0, arguments.values.Length);
