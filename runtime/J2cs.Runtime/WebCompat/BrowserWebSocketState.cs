@@ -8,7 +8,7 @@ namespace J2cs.Runtime.WebCompat;
 /// </summary>
 public sealed class BrowserWebSocketState
 {
-    private readonly List<WebSocketTraceEntry> trace = [];
+    private readonly List<WebSocketTraceEntry> trace = new();
     private readonly Queue<WebSocketQueuedFrame> outbound = new();
     private long sequence;
 
@@ -17,7 +17,7 @@ public sealed class BrowserWebSocketState
         HostProfile = hostProfile ?? WebSocketHostProfile.Browser;
         HostProfile.RequireBrowserSemantics();
         Url = NormalizeUrl(url);
-        Protocols = ValidateProtocols(protocols ?? []);
+        Protocols = ValidateProtocols(protocols ?? Array.Empty<string>());
         ReadyState = BrowserWebSocketReadyState.Connecting;
         AddTrace(WebSocketTraceKind.Constructed, Url.AbsoluteUri);
     }
@@ -151,7 +151,7 @@ public sealed class BrowserWebSocketState
                 throw new WebSocketContractException("SyntaxError", "Invalid or duplicate WebSocket subprotocol.");
             result.Add(protocol);
         }
-        return [.. result];
+        return result.ToArray();
     }
 
     private static bool IsProtocolToken(string value)
