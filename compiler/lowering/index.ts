@@ -4,7 +4,7 @@ import type { Binding } from '../analysis/bindings.js';
 import type { SemanticExpr as SE, SemanticProgram, SemanticStatement as SS } from '../ir/semantic.js';
 import { box, unbox, type CsExpr as CE, type CsProgram, type CsStatement as CS } from '../ir/csharp.js';
 import { RuleIndex, type Candidate, type Selector } from '../rules/index.js';
-import { expressionFacts, programFacts } from '../rules/facts.js';
+import { captureFacts, expressionFacts, programFacts } from '../rules/facts.js';
 import type { FactModel } from '../analysis/facts.js';
 export interface Trace {
   ruleId: string; strategy: string; lowering: string; span: Span; sha256: string;
@@ -34,6 +34,17 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
       rejected: result.candidates.filter(c => c !== chosen).map(c => ({ id: c.loaded.rule.id, verdict: c.proof.verdict })) });
     return chosen.adapter.lowering;
   }
+  function functionObject(binding: Binding, span: Span): CE {
+    const captures = program.captures.get(binding.function!.id + 1) ?? [];
+    for (const captured of captures) {
+      if (!['const', 'let', 'parameter'].includes(captured.kind)) continue;
+      const op = select({ kind: 'closure.capture' }, captureFacts(captured), span);
+      if (op !== 'closure.shared-cell') fail('E_LOWERING', 'Closure capture adapter has no implementation.', span);
+      contracts.add('core.lexical-closure.shared-cell-v1');
+    }
+    contracts.add('core.function-object.runtime-v1');
+    return { kind: 'functionCreate', repr: 'value', templateId: binding.id };
+  }
   function expression(e: SE): CE {
     const facts = expressionFacts(e);
     switch (e.kind) {
@@ -62,12 +73,7 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
         });
         return result;
       }
-      case 'functionValue': {
-        contracts.add('core.function-object.runtime-v1');
-        if ((program.captures.get(e.binding.function!.id + 1)?.length ?? 0) > 0)
-          contracts.add('core.lexical-closure.shared-cell-v1');
-        return { kind: 'functionCreate', repr: 'value', templateId: e.binding.id };
-      }
+      case 'functionValue': return functionObject(e.binding, e.span);
       case 'read':
         if (e.binding.kind !== 'intrinsic') { contracts.add('core.lexical-read'); return read(e.binding); }
         switch (select({ kind: 'intrinsic', intrinsic: e.binding.name }, facts, e.span)) {
@@ -235,7 +241,7 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
       contracts.add('core.function-object.runtime-v1');
     }
     return declarations.map(b => ({ kind: 'binding', id: b.id,
-      initializer: { kind: 'functionCreate', repr: 'value', templateId: b.id } }));
+      initializer: functionObject(b, b.declaration!.span) }));
   }
   const functions = program.functions.map(fn => ({
     name: `F${fn.instanceId}`,
