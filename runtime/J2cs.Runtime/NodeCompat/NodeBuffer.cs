@@ -49,6 +49,12 @@ public sealed class NodeBuffer : JsObject
         return new NodeBuffer(copy, 0, copy.Length);
     }
 
+    public static NodeBuffer From(NodeBuffer value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return From(value.ToArray());
+    }
+
     public static NodeBuffer FromArrayBuffer(byte[] backingStore, int byteOffset = 0, int? length = null)
     {
         ArgumentNullException.ThrowIfNull(backingStore);
