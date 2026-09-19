@@ -15,21 +15,21 @@ export interface RendererRuleAdapter {
  * contracts be proved without pretending parser/lowering integration.
  */
 export const rendererWebAdapters: readonly RendererRuleAdapter[] = [
-  { ruleId: 'dom.event.constructor', sha256: 'PENDING', operation: 'event.construct', lowering: 'WebCompat.JsDomEvent' },
-  { ruleId: 'dom.eventtarget.add-event-listener', sha256: 'PENDING', operation: 'eventTarget.add', lowering: 'WebCompat.JsEventTarget.AddEventListener' },
-  { ruleId: 'dom.eventtarget.remove-event-listener', sha256: 'PENDING', operation: 'eventTarget.remove', lowering: 'WebCompat.JsEventTarget.RemoveEventListener' },
-  { ruleId: 'dom.eventtarget.dispatch-event', sha256: 'PENDING', operation: 'eventTarget.dispatch', lowering: 'WebCompat.JsEventTarget.DispatchEvent' },
-  { ruleId: 'dom.event.prevent-default', sha256: 'PENDING', operation: 'event.preventDefault', lowering: 'WebCompat.JsDomEvent.PreventDefault' },
-  { ruleId: 'dom.event.stop-propagation', sha256: 'PENDING', operation: 'event.stopPropagation', lowering: 'WebCompat.JsDomEvent.StopPropagation' },
-  { ruleId: 'dom.event.stop-immediate-propagation', sha256: 'PENDING', operation: 'event.stopImmediatePropagation', lowering: 'WebCompat.JsDomEvent.StopImmediatePropagation' },
-  { ruleId: 'web.blob.constructor', sha256: 'PENDING', operation: 'blob.construct', lowering: 'WebCompat.JsBlob.Create' },
-  { ruleId: 'web.blob.string-part', sha256: 'PENDING', operation: 'blob.stringPart', lowering: 'WebCompat.JsBlobPart.FromString' },
-  { ruleId: 'web.blob.size', sha256: 'PENDING', operation: 'blob.size', lowering: 'WebCompat.JsBlob.Size' },
-  { ruleId: 'web.blob.type', sha256: 'PENDING', operation: 'blob.type', lowering: 'WebCompat.JsBlob.Type' },
-  { ruleId: 'web.blob.slice', sha256: 'PENDING', operation: 'blob.slice', lowering: 'WebCompat.JsBlob.Slice' },
-  { ruleId: 'web.file.constructor', sha256: 'PENDING', operation: 'file.construct', lowering: 'WebCompat.JsFile.Create' },
-  { ruleId: 'web.file.name', sha256: 'PENDING', operation: 'file.name', lowering: 'WebCompat.JsFile.Name' },
-  { ruleId: 'web.file.last-modified', sha256: 'PENDING', operation: 'file.lastModified', lowering: 'WebCompat.JsFile.LastModified' },
+  { ruleId: 'dom.event.constructor', sha256: '6261b1f1e8977cbdf065d8061b191a820234f74c549b1436a1a64d773b4b7bb8', operation: 'event.construct', lowering: 'WebCompat.JsDomEvent' },
+  { ruleId: 'dom.eventtarget.add-event-listener', sha256: 'f4f895f8fd9b677c1d5f5b421bc2f2a842999e88d266831e010c532ae4056278', operation: 'eventTarget.add', lowering: 'WebCompat.JsEventTarget.AddEventListener' },
+  { ruleId: 'dom.eventtarget.remove-event-listener', sha256: '73ebda1c9a4447255ab6abec34cb60175e1caad14f53fdbb101d0c9383bc5460', operation: 'eventTarget.remove', lowering: 'WebCompat.JsEventTarget.RemoveEventListener' },
+  { ruleId: 'dom.eventtarget.dispatch-event', sha256: '1b835f081c7d0dce35415626ccffbdb51deb12a5318de0fe23718e7d76f8da95', operation: 'eventTarget.dispatch', lowering: 'WebCompat.JsEventTarget.DispatchEvent' },
+  { ruleId: 'dom.event.prevent-default', sha256: 'a9587fa4b2ad3e6bdf70b574d9f6748c06dc1d1c0bb7b4a2b5efb2a06ac302a3', operation: 'event.preventDefault', lowering: 'WebCompat.JsDomEvent.PreventDefault' },
+  { ruleId: 'dom.event.stop-propagation', sha256: '97cc9d11c54d20d5b6f1f68e9e4f608200c0eae5f761abb1cf708f5659f03342', operation: 'event.stopPropagation', lowering: 'WebCompat.JsDomEvent.StopPropagation' },
+  { ruleId: 'dom.event.stop-immediate-propagation', sha256: '845aee24a36b414d4ebf0c204e8d099f297aefc917a26229ced59ce099e2d37e', operation: 'event.stopImmediatePropagation', lowering: 'WebCompat.JsDomEvent.StopImmediatePropagation' },
+  { ruleId: 'web.blob.constructor', sha256: 'c0d972eacd885961ec62c6f58f08d5714b8cd2126e7248f67745c266a5c6da5d', operation: 'blob.construct', lowering: 'WebCompat.JsBlob.Create' },
+  { ruleId: 'web.blob.string-part', sha256: '5dfd33dc0be6f98708a146bff23ce6e16fe5e715e4111ae6435a3f6b3011b3aa', operation: 'blob.stringPart', lowering: 'WebCompat.JsBlobPart.FromString' },
+  { ruleId: 'web.blob.size', sha256: '130b3b9d8d64229f971da019c19a337325b242b3aaa4bb4c6fcecec83aafe6ec', operation: 'blob.size', lowering: 'WebCompat.JsBlob.Size' },
+  { ruleId: 'web.blob.type', sha256: '644574555a720780e2ede19fda17814ee464ac503e181ec077d7ad49ce4f8136', operation: 'blob.type', lowering: 'WebCompat.JsBlob.Type' },
+  { ruleId: 'web.blob.slice', sha256: 'db3246928d3634edb8760b7ce46603687eb13cf9024d47c236eb994ccbb1bda8', operation: 'blob.slice', lowering: 'WebCompat.JsBlob.Slice' },
+  { ruleId: 'web.file.constructor', sha256: 'b28ded7ec4f9347268cba17eb8c7f0ab229cb7d872be6442cdb2a8891a4dcd38', operation: 'file.construct', lowering: 'WebCompat.JsFile.Create' },
+  { ruleId: 'web.file.name', sha256: 'da9d58ad28d35565dc558fdfbc5ee5605cc4d4fd9eedb4430d2ae531dcba7841', operation: 'file.name', lowering: 'WebCompat.JsFile.Name' },
+  { ruleId: 'web.file.last-modified', sha256: '589ef04a735992a2bdb910421b620abe8479e52ac3f82701b9bda64adbcccfc9', operation: 'file.lastModified', lowering: 'WebCompat.JsFile.LastModified' },
 ];
 
 const byId = new Map(rendererWebAdapters.map(adapter => [adapter.ruleId, adapter]));
