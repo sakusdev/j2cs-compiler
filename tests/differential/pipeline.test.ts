@@ -67,6 +67,18 @@ const fixtures: Fixture[] = [
     console.log(a.push(6,undefined),a.length,Object.hasOwn(a,6),a[5],a[6]===undefined);
     console.log(a===a,a===[]); console.log(!a); if(a) console.log('array-truthy');
   ` },
+  { name: 'array-string-builtins', source: `
+    const a=[NaN,,undefined,3];
+    console.log(a.length,a.at(-1),a.at(1)===undefined,a.includes(NaN),a.includes(undefined),a.indexOf(undefined));
+    console.log([1,2,1].includes(1,-1),[1,2,1].indexOf(1,-1),[10,20].at(1.9));
+    console.log(a.pop(),a.length,Object.hasOwn(a,3));
+    const o={}; const refs=[o]; console.log(refs.includes(o),refs.indexOf(o));
+    const s='A\\ud83d\\ude00B';
+    console.log(s.length,s.at(1)==='\\ud83d',s.at(-2)==='\\ude00',s.charAt(2)==='\\ude00',s.charAt(99)==='');
+    console.log(s.includes('\\ud83d'),s.indexOf('B'),s.includes('',99));
+    console.log(s.slice(1,-1)==='\\ud83d\\ude00',s.substring(3,1)==='\\ud83d\\ude00');
+    console.log('abcabc'.indexOf('bc',2),'abcabc'.includes('bc',4));
+  ` },
   { name: 'functions-and-returns', source: `
     console.log(add(10, 20));
     function add(a, b) { return a + b; }
@@ -169,6 +181,12 @@ for (const fixture of fixtures) {
       assert.ok(r.result.trace.some(t => t.ruleId === 'array.length.read'));
       assert.ok(r.result.trace.some(t => t.ruleId === 'array.prototype.push'));
       assert.ok(r.result.trace.some(t => t.ruleId === 'object.has-own'));
+    }
+    if (fixture.name === 'array-string-builtins') {
+      for (const id of ['array.prototype.at', 'array.prototype.includes', 'array.prototype.indexof', 'array.prototype.pop',
+        'string.length', 'string.prototype.at', 'string.prototype.charat', 'string.prototype.includes',
+        'string.prototype.indexof', 'string.prototype.slice', 'string.prototype.substring'])
+        assert.ok(r.result.trace.some(t => t.ruleId === id && t.requirements.verdict === 'proven'), `missing proven ${id}`);
     }
   });
 }
