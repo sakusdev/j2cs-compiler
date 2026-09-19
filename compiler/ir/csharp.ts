@@ -1,10 +1,11 @@
 /** Typed emission IR. No raw source fragments, templates, parser nodes, dynamic or CLR object. */
-export type Repr = 'value' | 'number' | 'string' | 'boolean';
+export type Repr = 'value' | 'number' | 'string' | 'boolean' | 'arguments';
 export type CsExpr =
   | { kind: 'literal'; repr: 'number'; value: number }
   | { kind: 'literal'; repr: 'string'; value: string }
   | { kind: 'literal'; repr: 'boolean'; value: boolean }
-  | { kind: 'read' | 'ref'; repr: 'value'; name: string }
+  | { kind: 'read'; repr: 'value' | 'arguments'; name: string }
+  | { kind: 'ref'; repr: 'value'; name: string }
   | { kind: 'member'; repr: Repr; name: 'JsNull.Value' | 'JsUndefined.Value' | 'double.NaN' | 'double.PositiveInfinity' }
   | { kind: 'call'; repr: Repr; target: string; args: CsExpr[] }
   | { kind: 'unbox'; repr: 'number' | 'string' | 'boolean'; value: CsExpr }
