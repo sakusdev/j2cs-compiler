@@ -27,10 +27,11 @@ public sealed class JsSet : JsObject
 
         public JsValue Next()
         {
-            if (owner is null) return JsCollectionIterator.Done();
-            while (cursor < owner.entries.Count)
+            var current = owner;
+            if (current is null) return JsCollectionIterator.Done();
+            while (cursor < current.entries.Count)
             {
-                var entry = owner.entries[cursor++];
+                var entry = current.entries[cursor++];
                 if (!entry.Active) continue;
                 var value = kind == IterationKind.Value
                     ? entry.Value
