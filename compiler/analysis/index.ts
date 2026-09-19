@@ -31,7 +31,8 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   const cloneValue = (v: ValueInfo): ValueInfo => ({ types: v.types, ...(v.refs ? { refs: [...v.refs] } : {}),
     ...(v.functionIds ? { functionIds: [...v.functionIds] } : {}) });
   const withValue = <T extends object>(node: T, value: ValueInfo): T & ValueInfo =>
-    ({ ...node, types: value.types, ...(value.refs ? { refs: value.refs } : {}) });
+    ({ ...node, types: value.types, ...(value.refs ? { refs: value.refs } : {}),
+      ...(value.functionIds ? { functionIds: value.functionIds } : {}) });
 
   function unionValue(...values: ValueInfo[]): ValueInfo {
     const types = union(...values.map(v => v.types));
