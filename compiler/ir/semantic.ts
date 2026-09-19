@@ -1,13 +1,21 @@
 import type { Binding } from '../analysis/bindings.js';
 import type { TypeSet } from '../analysis/facts.js';
 import type { Node, LiteralValue } from '../parser/ast.js';
-export type SemanticExpr = Node & { types: TypeSet } & (
+export type RefSet = readonly number[];
+interface Typed { types: TypeSet; refs?: RefSet }
+export type SemanticExpr = Node & Typed & (
   | { kind: 'literal'; value: LiteralValue | undefined }
   | { kind: 'read'; binding: Binding }
   | { kind: 'binary'; op: string; left: SemanticExpr; right: SemanticExpr }
   | { kind: 'unary'; op: string; operand: SemanticExpr }
   | { kind: 'assign'; binding: Binding; value: SemanticExpr }
+  | { kind: 'propertyAssign'; object: SemanticExpr; property: string; value: SemanticExpr }
+  | { kind: 'member'; object: SemanticExpr; property: string }
+  | { kind: 'object'; properties: { key: string; value: SemanticExpr }[] }
+  | { kind: 'array'; elements: (SemanticExpr | null)[] }
   | { kind: 'call'; target: 'console' | number; args: SemanticExpr[]; binding: Binding; arity: number }
+  | { kind: 'call'; target: 'array.push'; receiver: SemanticExpr; args: SemanticExpr[]; arity: number }
+  | { kind: 'call'; target: 'object.hasOwn'; receiver: SemanticExpr; property: string; binding: Binding; args: []; arity: 2 }
 );
 export type SemanticStatement = Node & (
   | { kind: 'variable'; binding: Binding; initializer: SemanticExpr }
