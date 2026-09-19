@@ -16,17 +16,21 @@ test('Node compatibility adapters pin the reviewed canonical rules', () => {
 test('EventEmitter proof requires the receiver and pristine member', () => {
   const facts = new Facts()
     .prove('node.receiver', 'events.EventEmitter', 'receiver inference')
-    .prove('node.member.integrity', 'pristine', 'member integrity');
+    .prove('node.member.integrity', 'pristine', 'member integrity')
+    .prove('node.events.metaEventsObserved', false, 'meta event analysis');
   const proof = index.prove('node.events.event-emitter.on', facts);
   assert.equal(proof.verdict, 'proven');
   assert.equal(proof.helper, 'NodeEvents.On');
 
-  const missing = new Facts().prove('node.receiver', 'events.EventEmitter', 'receiver inference');
+  const missing = new Facts()
+    .prove('node.receiver', 'events.EventEmitter', 'receiver inference')
+    .prove('node.events.metaEventsObserved', false, 'meta event analysis');
   assert.equal(index.prove('node.events.event-emitter.on', missing).verdict, 'unknown');
 
   const replaced = new Facts()
     .prove('node.receiver', 'events.EventEmitter', 'receiver inference')
-    .prove('node.member.integrity', 'replaced', 'member integrity');
+    .prove('node.member.integrity', 'replaced', 'member integrity')
+    .prove('node.events.metaEventsObserved', false, 'meta event analysis');
   assert.equal(index.prove('node.events.event-emitter.on', replaced).verdict, 'disproven');
 });
 
@@ -34,14 +38,16 @@ test('unhandled error proof requires zero registered error listeners', () => {
   const facts = new Facts()
     .prove('node.receiver', 'events.EventEmitter', 'receiver inference')
     .prove('node.member.integrity', 'pristine', 'member integrity')
-    .prove('node.event.errorListenerCount', 0, 'listener analysis');
+    .prove('node.event.errorListenerCount', 0, 'listener analysis')
+    .prove('node.errorPayload.kind', 'nonError', 'payload analysis');
   assert.equal(index.prove('node.events.event-emitter.emit-error-unhandled', facts).verdict, 'proven');
 });
 
 test('stream lifecycle helpers fail closed without a compatible scheduler', () => {
   const facts = new Facts()
     .prove('node.receiver', 'stream.Writable', 'receiver inference')
-    .prove('node.member.integrity', 'pristine', 'member integrity');
+    .prove('node.member.integrity', 'pristine', 'member integrity')
+    .prove('node.stream.chunkRepresentation', 'NodeStreamChunk', 'chunk lowering');
   assert.equal(index.prove('node.stream.writable.write', facts).verdict, 'unknown');
 
   facts.prove('node.scheduler', 'compatible', 'host scheduler contract');
