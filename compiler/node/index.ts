@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { Facts, type FactModel } from '../analysis/facts.js';
 
 export const NODE_RULE_DB_COMMIT = '35ca8d859f9352e90ee2497f4ac8f6edb9c19ed1';
@@ -197,4 +200,19 @@ export function nodeOsFacts(): Facts {
   return baseNodeFacts()
     .prove('binding.origin', 'node:os', 'Module resolver proved the node:os builtin.')
     .prove('binding.shadowed', false, 'The imported builtin binding is intact.');
+}
+
+
+export async function verifyNodeRuleAdapters(ruleDb: string): Promise<void> {
+  for (const adapter of NODE_RULE_ADAPTERS) {
+    const file = path.join(ruleDb, adapter.rulePath);
+    const normalized = (await readFile(file, 'utf8')).replace(/\r\n/g, '\n');
+    const sha256 = createHash('sha256').update(normalized, 'utf8').digest('hex');
+    if (sha256 !== adapter.sha256)
+      throw new Error(`E_NODE_RULE_CONTRACT: canonical rule drifted: ${adapter.ruleId}`);
+
+    const rule = JSON.parse(normalized) as { id?: unknown; strategy?: unknown };
+    if (rule.id !== adapter.ruleId || rule.strategy !== adapter.strategy)
+      throw new Error(`E_NODE_RULE_CONTRACT: canonical rule identity/strategy mismatch: ${adapter.ruleId}`);
+  }
 }
