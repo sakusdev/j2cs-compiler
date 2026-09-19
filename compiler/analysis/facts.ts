@@ -1,11 +1,11 @@
-export type JsType = 'Number' | 'String' | 'Boolean' | 'Null' | 'Undefined' | 'Object' | 'Array';
+export type JsType = 'Number' | 'String' | 'Boolean' | 'Null' | 'Undefined' | 'Object' | 'Array' | 'Function';
 export type TypeSet = readonly JsType[];
 export const PRIMITIVES: TypeSet = ['Boolean', 'Null', 'Number', 'String', 'Undefined'];
-export const REFERENCES: TypeSet = ['Array', 'Object'];
+export const REFERENCES: TypeSet = ['Array', 'Function', 'Object'];
 export function union(...sets: TypeSet[]): TypeSet { return [...new Set(sets.flat())].sort() as JsType[]; }
 export function exactly(types: TypeSet | undefined, type: JsType): boolean { return types?.length === 1 && types[0] === type; }
 export function isPrimitiveSet(types: TypeSet): boolean { return types.every(t => PRIMITIVES.includes(t)); }
-export function hasReference(types: TypeSet): boolean { return types.some(t => t === 'Object' || t === 'Array'); }
+export function hasReference(types: TypeSet): boolean { return types.some(t => t === 'Object' || t === 'Array' || t === 'Function'); }
 export function literalType(value: number | string | boolean | null): TypeSet {
   return [value === null ? 'Null' : typeof value === 'number' ? 'Number' : typeof value === 'string' ? 'String' : 'Boolean'];
 }
