@@ -65,8 +65,11 @@ ledger.EvaluateOnce("cycle", () => {
     assert.equal(build.exit, 0, `dotnet build failed:\n${build.stdout}\n${build.stderr}`);
     const node = await run(process.execPath, ['oracle.cjs'], dir);
     const managed = await run(process.env.DOTNET ?? 'dotnet', [path.join(dir, 'bin/Debug/net8.0/BundleDiff.dll')], dir);
-    assert.deepEqual(managed, node);
-    assert.equal(node.stdout, 'true\nfalse\nshared\nmain\nfalse\ncycle:start\nfalse\ncycle:end\n');
+    assert.deepEqual(
+      { ...managed, stdout: managed.stdout.replaceAll('\\r\\n', '\\n') },
+      { ...node, stdout: node.stdout.replaceAll('\\r\\n', '\\n') },
+    );
+    assert.equal(node.stdout.replaceAll('\\r\\n', '\\n'), 'true\nfalse\nshared\nmain\nfalse\ncycle:start\nfalse\ncycle:end\n');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
