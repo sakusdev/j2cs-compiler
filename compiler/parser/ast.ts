@@ -18,9 +18,10 @@ export type Expr = Node & (
   | { kind: 'member'; object: Expr; property: string }
   | { kind: 'object'; properties: ObjectProperty[] }
   | { kind: 'array'; elements: (Expr | null)[] }
+  | { kind: 'spread'; operand: Expr }
   | { kind: 'call'; callee: Expr; args: Expr[] }
 );
-export interface Parameter extends Node { name: string }
+export interface Parameter extends Node { name: string; initializer?: Expr; rest: boolean }
 export type Statement = Node & (
   | { kind: 'variable'; mode: 'const' | 'let'; name: string; initializer?: Expr }
   | { kind: 'expression'; expression: Expr }
