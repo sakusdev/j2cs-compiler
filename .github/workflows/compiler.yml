@@ -1,0 +1,69 @@
+name: Compiler MVP
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compiler:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: npm ci
+      - name: Build runtime
+        run: dotnet build runtime/J2cs.Runtime/J2cs.Runtime.csproj --nologo
+      - name: Compiler and Node differential tests (no SDK skip)
+        run: npm test
+      - name: Compile the required MVP through the CLI
+        run: npm run compile -- examples/hello.js --out artifacts/hello
+      - run: dotnet build artifacts/hello/Generated.csproj --nologo
+      - run: dotnet artifacts/hello/bin/Debug/net8.0/J2cs.Generated.dll
+
+  rule-db-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check jsonschema
+      - name: Run the unmodified upstream rule validator
+        working-directory: rule-db
+        run: python tools/validate_rules.py
+      - name: Run the unmodified upstream Coverage Gap Analyzer
+        working-directory: rule-db
+        run: |
+          python tools/coverage_gap.py --top 60 \
+            --json-out ../artifacts/coverage-report.json \
+            --markdown-out ../artifacts/coverage-report.md \
+            --issues-out ../artifacts/coverage-issues.json
+      - name: Verify the rule DB remains untouched
+        run: git -C rule-db diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: upstream-coverage-gap-report
+          path: artifacts/coverage-*

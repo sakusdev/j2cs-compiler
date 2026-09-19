@@ -1,0 +1,260 @@
+{
+  "version": 1,
+  "ruleDbCommit": "35ca8d859f9352e90ee2497f4ac8f6edb9c19ed1",
+  "adapters": [
+    {
+      "ruleId": "operators.addition.number",
+      "sha256": "a8fc047f14acd2a4b0a0335ec6d8538fb92504909743069cdbedf8b80338e864",
+      "selector": {
+        "kind": "binary",
+        "operator": "+"
+      },
+      "lowering": "binary.number"
+    },
+    {
+      "ruleId": "operators.subtraction.number",
+      "sha256": "43644b55a672ea484fe93c8568215f29bd1a7000b7ae086d1bdc69a69f39d86f",
+      "selector": {
+        "kind": "binary",
+        "operator": "-"
+      },
+      "lowering": "binary.number"
+    },
+    {
+      "ruleId": "operators.multiplication.number",
+      "sha256": "02666c7b8412e5e9629776994fee353b13f910a879e6a3db807d3b429e4b0615",
+      "selector": {
+        "kind": "binary",
+        "operator": "*"
+      },
+      "lowering": "binary.number"
+    },
+    {
+      "ruleId": "operators.division.number",
+      "sha256": "1da4bd6653aef5bab2567642b9ea95756c78ab2496d228b75d104a586640eab2",
+      "selector": {
+        "kind": "binary",
+        "operator": "/"
+      },
+      "lowering": "binary.number"
+    },
+    {
+      "ruleId": "operators.remainder.number",
+      "sha256": "7f39f6dc99ca862551a23ed71f9a3300086ee35f87a394ad16e11dae6c81e1e1",
+      "selector": {
+        "kind": "binary",
+        "operator": "%"
+      },
+      "lowering": "binary.number"
+    },
+    {
+      "ruleId": "operators.less-than.number",
+      "sha256": "a226bb7439af29b61d2fb02603147df6e1f28d0103c5f1f78351191786cf6fe4",
+      "selector": {
+        "kind": "binary",
+        "operator": "<"
+      },
+      "lowering": "binary.number"
+    },
+    {
+      "ruleId": "operators.less-than-or-equal.number",
+      "sha256": "76ccc3e719416e90d88fc84273b098471027795343d01394f52d7acff40030a6",
+      "selector": {
+        "kind": "binary",
+        "operator": "<="
+      },
+      "lowering": "binary.number"
+    },
+    {
+      "ruleId": "operators.greater-than.number",
+      "sha256": "95743112e05e01329692a6ae1585c6dee42200a2bc48906e7272794b588ae090",
+      "selector": {
+        "kind": "binary",
+        "operator": ">"
+      },
+      "lowering": "binary.number"
+    },
+    {
+      "ruleId": "operators.greater-than-or-equal.number",
+      "sha256": "b3c2e9f47f6739bf2a2d6ab4467e5c06fa4fa73780b579176b43540e721d0ce5",
+      "selector": {
+        "kind": "binary",
+        "operator": ">="
+      },
+      "lowering": "binary.number"
+    },
+    {
+      "ruleId": "operators.addition.string",
+      "sha256": "dac74158fefc4b6c17c29baa86fa3e2490cf0148961b743335b7ef45e6543a70",
+      "selector": {
+        "kind": "binary",
+        "operator": "+"
+      },
+      "lowering": "binary.string"
+    },
+    {
+      "ruleId": "operators.addition.dynamic",
+      "sha256": "b065586a924be7ed47b109b00d7c446632f0c29fe94d858fa49ee54eb592b02b",
+      "selector": {
+        "kind": "binary",
+        "operator": "+"
+      },
+      "lowering": "helper.add"
+    },
+    {
+      "ruleId": "operators.strict-equality.number",
+      "sha256": "71e8f54325f67ac7396dad87ade810ea42e8352275d008cecd988d5c6fd9cfc3",
+      "selector": {
+        "kind": "binary",
+        "operator": "==="
+      },
+      "lowering": "equality.number"
+    },
+    {
+      "ruleId": "operators.strict-equality.string",
+      "sha256": "271db41ebac9c6c179799fc135781cac1e492520b2d82f866a30eaf1317ab61a",
+      "selector": {
+        "kind": "binary",
+        "operator": "==="
+      },
+      "lowering": "equality.string"
+    },
+    {
+      "ruleId": "operators.strict-equality.boolean",
+      "sha256": "e5bba97e7df5ab73f21b8aa86923e6b2f6769d439363ea0f1015a3baf4753fb2",
+      "selector": {
+        "kind": "binary",
+        "operator": "==="
+      },
+      "lowering": "equality.boolean"
+    },
+    {
+      "ruleId": "operators.strict-equality.dynamic",
+      "sha256": "92458f7b9c4e753bff36a1dca19030b29b7ad55e0107a25d07bcf44e3004cf23",
+      "selector": {
+        "kind": "binary",
+        "operator": "==="
+      },
+      "lowering": "helper.strictEquals"
+    },
+    {
+      "ruleId": "operators.strict-inequality.dynamic",
+      "sha256": "aa2a8ffd8b49188294875086669974ad0aa9a7ed4d0020cba95554c861909b90",
+      "selector": {
+        "kind": "binary",
+        "operator": "!=="
+      },
+      "lowering": "helper.strictNotEquals"
+    },
+    {
+      "ruleId": "operators.unary-minus.number",
+      "sha256": "334199b8681e9907b69c1680fb7bac4ec8074bc904bd2f13ea6a636a4c474d35",
+      "selector": {
+        "kind": "unary",
+        "operator": "-"
+      },
+      "lowering": "unary.number"
+    },
+    {
+      "ruleId": "operators.logical-not.boolean",
+      "sha256": "26bdfc7d412ffe4d8e772ffb2a6e4bca199b04dd44ad014ddd1280fa4755bf96",
+      "selector": {
+        "kind": "unary",
+        "operator": "!"
+      },
+      "lowering": "unary.boolean"
+    },
+    {
+      "ruleId": "operators.logical-not.dynamic",
+      "sha256": "0ddb27a1a3bada0cd0ae7aa190eec3cc40b16a448b5ce36202a6aed6ecd362e5",
+      "selector": {
+        "kind": "unary",
+        "operator": "!"
+      },
+      "lowering": "helper.not"
+    },
+    {
+      "ruleId": "values.number.ieee754-representation",
+      "sha256": "528aa0ef989450984eed998c956474db063fc913e7367839ddbbd51040da1731",
+      "selector": {
+        "kind": "literal.number"
+      },
+      "lowering": "literal.number"
+    },
+    {
+      "ruleId": "values.null.literal",
+      "sha256": "222e7ea6ce11ae5a5360132c21def17abe6c9ad4968d9176fa069bf33f2d6a4c",
+      "selector": {
+        "kind": "literal.null"
+      },
+      "lowering": "literal.null"
+    },
+    {
+      "ruleId": "values.undefined.intrinsic-binding",
+      "sha256": "59f79b6c513f5ef37ed6fe41f673d2e4a385fda30b7d38d6136c505f2248f843",
+      "selector": {
+        "kind": "intrinsic",
+        "intrinsic": "undefined"
+      },
+      "lowering": "intrinsic.undefined"
+    },
+    {
+      "ruleId": "values.nan.intrinsic-binding",
+      "sha256": "1d1785f82430af6fe881bcc564012e4ecbb494f3b16fcf513695fd3181496cc3",
+      "selector": {
+        "kind": "intrinsic",
+        "intrinsic": "NaN"
+      },
+      "lowering": "intrinsic.nan"
+    },
+    {
+      "ruleId": "values.infinity.intrinsic-binding",
+      "sha256": "448c300749a67f33b0176a5244f26916d02dbd95cac2365848a3e9f23b59a083",
+      "selector": {
+        "kind": "intrinsic",
+        "intrinsic": "Infinity"
+      },
+      "lowering": "intrinsic.infinity"
+    },
+    {
+      "ruleId": "function.call.direct-known-exact-arity",
+      "sha256": "e631a755eaae1191a9e4c011da98608a5522d9fd681fbbc3b8e7c0f799b76186",
+      "selector": {
+        "kind": "call.function"
+      },
+      "lowering": "call.function"
+    },
+    {
+      "ruleId": "function.declaration.hoisted-binding",
+      "sha256": "4e9228bf68b1ebd5e4c7ea45fedfee753727f861a936090e5e620915ff69851e",
+      "selector": {
+        "kind": "function"
+      },
+      "lowering": "function"
+    },
+    {
+      "ruleId": "function.return.bare-undefined",
+      "sha256": "26978f7b4afdb17d73c09c8a304ece07929d75109b2ee0d299ff734677d117fc",
+      "selector": {
+        "kind": "return.undefined"
+      },
+      "lowering": "return.undefined"
+    },
+    {
+      "ruleId": "operators.assignment",
+      "sha256": "3d7043e34f1c51513c3b334b87043a8148f7143c685e44687c036b6246a940f5",
+      "selector": {
+        "kind": "assign"
+      },
+      "lowering": "helper.assign"
+    },
+    {
+      "ruleId": "semantics.truthiness",
+      "sha256": "ea1984809d61dc021a697c428cfc0418e0d71c88c51298a070b394284d5d381b",
+      "selector": {
+        "kind": "condition"
+      },
+      "lowering": "helper.truthiness"
+    }
+  ]
+}
