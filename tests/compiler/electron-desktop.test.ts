@@ -15,7 +15,11 @@ import {
 const database = await loadRules(path.join(ROOT, 'rule-db'));
 
 function contextFor(ruleId: string): ElectronDesktopProofContext {
-  const common = { memberIntegrity: 'pristine' as const, hostCapability: true };
+  const common = {
+    memberIntegrity: 'pristine' as const,
+    hostCapability: true,
+    argumentsRepresentable: true,
+  };
   switch (ruleId) {
     case 'electron.tray.constructor':
       return { ...common, moduleBinding: 'electron.Tray', process: 'main', appReady: true };
@@ -79,6 +83,7 @@ test('desktop proof remains fail-closed when lifecycle, host, binding, or integr
     process: 'main',
     appReady: false,
     hostCapability: true,
+    argumentsRepresentable: true,
   });
   assert.equal(notReady.verdict, 'disproven');
 
@@ -87,12 +92,14 @@ test('desktop proof remains fail-closed when lifecycle, host, binding, or integr
     memberIntegrity: 'pristine',
     process: 'main',
     hostCapability: true,
+    argumentsRepresentable: true,
   });
   assert.equal(readinessUnknown.verdict, 'unknown');
 
   const hostUnknown = proveElectronDesktopRule(database, 'electron.shell.openexternal', {
     moduleBinding: 'electron.shell',
     memberIntegrity: 'pristine',
+    argumentsRepresentable: true,
   });
   assert.equal(hostUnknown.verdict, 'unknown');
 
@@ -100,6 +107,7 @@ test('desktop proof remains fail-closed when lifecycle, host, binding, or integr
     moduleBinding: 'electron.clipboard',
     memberIntegrity: 'overridden',
     hostCapability: true,
+    argumentsRepresentable: true,
   });
   assert.equal(overridden.verdict, 'disproven');
 
@@ -108,6 +116,7 @@ test('desktop proof remains fail-closed when lifecycle, host, binding, or integr
     memberIntegrity: 'pristine',
     process: 'renderer',
     hostCapability: true,
+    argumentsRepresentable: true,
   });
   assert.equal(renderer.verdict, 'disproven');
 
@@ -117,6 +126,7 @@ test('desktop proof remains fail-closed when lifecycle, host, binding, or integr
     process: 'main',
     appReady: true,
     hostCapability: true,
+    argumentsRepresentable: true,
   });
   assert.equal(wrongModule.verdict, 'disproven');
 
@@ -124,8 +134,19 @@ test('desktop proof remains fail-closed when lifecycle, host, binding, or integr
     electronProfile: 'legacy Electron',
     memberIntegrity: 'pristine',
     hostCapability: true,
+    argumentsRepresentable: true,
   });
   assert.equal(wrongProfile.verdict, 'disproven');
+
+  const unsupportedArguments = proveElectronDesktopRule(database, 'electron.tray.constructor', {
+    moduleBinding: 'electron.Tray',
+    memberIntegrity: 'pristine',
+    process: 'main',
+    appReady: true,
+    hostCapability: true,
+    argumentsRepresentable: false,
+  });
+  assert.equal(unsupportedArguments.verdict, 'disproven');
 });
 
 test('OS default-protocol registration is not invented as a canonical source rule', () => {
@@ -134,6 +155,7 @@ test('OS default-protocol registration is not invented as a canonical source rul
       memberIntegrity: 'pristine',
       process: 'main',
       hostCapability: true,
+      argumentsRepresentable: true,
     }),
     /No reviewed Electron desktop adapter/,
   );
