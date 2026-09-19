@@ -107,10 +107,11 @@ public sealed class JsMap : JsObject
 
         public JsValue Next()
         {
-            if (owner is null) return JsCollectionIterator.Done();
-            while (cursor < owner.entries.Count)
+            var current = owner;
+            if (current is null) return JsCollectionIterator.Done();
+            while (cursor < current.entries.Count)
             {
-                var entry = owner.entries[cursor++];
+                var entry = current.entries[cursor++];
                 if (!entry.Active) continue;
                 var value = kind switch
                 {
@@ -227,13 +228,12 @@ internal sealed class JsWeakMap : JsObject
         // non-registered Symbols may be admitted here; primitives remain non-weak keys.
         => key.Kind == JsKind.Object ? key.Reference : null;
 
-    internal JsValue Set(JsValue key, JsValue value)
+    internal void Set(JsValue key, JsValue value)
     {
         var reference = WeakKeyOrNull(key)
             ?? throw new JsWeakCollectionKeyException("Invalid value used as weak map key");
         if (entries.TryGetValue(reference, out var box)) box.Value = value;
         else entries.Add(reference, new Box(value));
-        return key;
     }
 
     internal JsValue Get(JsValue key)
