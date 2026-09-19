@@ -178,7 +178,7 @@ var q = JsPromise.Resolve(queue, JsValue.FromNumber(1));
 Log(ReferenceEquals(JsPromise.Resolve(queue, q.AsValue()), q) ? "true" : "false");
 JsPromise.Reject(queue, q.AsValue()).Catch(e =>
 {
-    Log(ReferenceEquals(JsObject.RequireReference(e), q) ? "true" : "false");
+    Log(JsPromise.IsSamePromise(e, q) ? "true" : "false");
     return JsUndefined.Value;
 });
 queue.Drain();
