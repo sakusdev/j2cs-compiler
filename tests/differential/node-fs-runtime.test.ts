@@ -59,6 +59,7 @@ test('NODE_FS sync runtime matches Node for bytes, encodings, existence and excl
     "console.log(fs.readFileSync('a.txt', 'hex'));",
     "console.log(fs.existsSync('a.txt'), fs.existsSync('missing'));",
     "try { fs.writeFileSync('a.txt', 'x', { flag: 'wx' }); } catch (e) { console.log(e.code); }",
+    "try { fs.readFileSync('missing.txt'); } catch (e) { console.log(e.code); }",
     '',
   ].join('\n');
   const csharpSource = [
@@ -73,6 +74,8 @@ test('NODE_FS sync runtime matches Node for bytes, encodings, existence and excl
     'Line(NodeFs.ReadFileSync("a.txt", NodeFsReadFileOptions.FromEncoding("hex")).Text);',
     'Line(NodeFs.ExistsSync("a.txt").ToString().ToLowerInvariant() + " " + NodeFs.ExistsSync("missing").ToString().ToLowerInvariant());',
     'try { NodeFs.WriteFileSync("a.txt", "x", NodeFsWriteFileOptions.FromFlag("wx")); }',
+    'catch (NodeFsException e) { Line(e.Code); }',
+    'try { NodeFs.ReadFileSync("missing.txt"); }',
     'catch (NodeFsException e) { Line(e.Code); }',
     '',
   ].join('\n');
