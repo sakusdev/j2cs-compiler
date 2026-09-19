@@ -25,6 +25,14 @@ export interface NativeModuleDescriptor {
   abi: NativeAbiContract;
 }
 
+export interface NativeModuleResolutionRecord {
+  request: string;
+  resolvedPath: string;
+  kind: 'native-addon' | 'javascript' | 'json' | 'unknown';
+  rid: string;
+  abi?: NativeAbiContract;
+}
+
 export interface NativeBackendCandidate {
   route: Exclude<NativeModuleRoute, 'unsupported'>;
   id: string;
@@ -46,9 +54,18 @@ export interface NativeResolverProof {
 }
 
 export interface NativeModuleDiagnostic {
-  code: 'E_NATIVE_MODULE_AMBIGUOUS' | 'E_NATIVE_MODULE_UNSUPPORTED';
+  code:
+    | 'E_NATIVE_MODULE_AMBIGUOUS'
+    | 'E_NATIVE_MODULE_UNSUPPORTED'
+    | 'E_NATIVE_MODULE_ABI_UNKNOWN'
+    | 'E_NATIVE_MODULE_KIND_UNKNOWN';
   message: string;
 }
+
+export type NativeModuleDiscovery =
+  | { kind: 'native-module'; descriptor: NativeModuleDescriptor; resolverProof: NativeResolverProof }
+  | { kind: 'not-native'; resolverProof: NativeResolverProof }
+  | { kind: 'unsupported-native'; resolverProof: NativeResolverProof; diagnostic: NativeModuleDiagnostic };
 
 export interface NativeModulePlan {
   descriptor: NativeModuleDescriptor;
@@ -102,6 +119,55 @@ export function proveNativeModuleResolution(database: RuleDatabase, context: Nat
 
 const routes: readonly Exclude<NativeModuleRoute, 'unsupported'>[] =
   ['known-adapter', 'pinvoke-wrapper', 'sidecar-bridge'];
+
+export function discoverNativeModule(
+  database: RuleDatabase,
+  context: NativeResolverContext,
+  resolution: NativeModuleResolutionRecord,
+): NativeModuleDiscovery {
+  const resolverProof = proveNativeModuleResolution(database, context);
+  validateText(resolution.request, 'request');
+  validateText(resolution.resolvedPath, 'resolved path');
+  validateText(resolution.rid, 'RID');
+
+  if (resolution.kind === 'javascript' || resolution.kind === 'json')
+    return { kind: 'not-native', resolverProof };
+
+  if (resolution.kind === 'unknown') {
+    return {
+      kind: 'unsupported-native',
+      resolverProof,
+      diagnostic: {
+        code: 'E_NATIVE_MODULE_KIND_UNKNOWN',
+        message: `Resolver did not prove a load kind for ${resolution.request}; refusing native migration guessing.`,
+      },
+    };
+  }
+
+  if (!resolution.abi) {
+    return {
+      kind: 'unsupported-native',
+      resolverProof,
+      diagnostic: {
+        code: 'E_NATIVE_MODULE_ABI_UNKNOWN',
+        message: `Resolver identified ${resolution.request} as a native addon without a reviewed ABI contract.`,
+      },
+    };
+  }
+
+  validateAbi(resolution.abi);
+  return {
+    kind: 'native-module',
+    resolverProof,
+    descriptor: {
+      request: resolution.request,
+      resolvedPath: resolution.resolvedPath,
+      format: 'node-addon',
+      rid: resolution.rid,
+      abi: resolution.abi,
+    },
+  };
+}
 
 function validateText(value: string, field: string): void {
   if (!value.length) fail('E_NATIVE_PLAN', `Native module ${field} must be non-empty.`);
