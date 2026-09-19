@@ -45,12 +45,12 @@ export function parse(source: string, file = 'input.js'): Program {
         if (target.kind !== 'identifier') unsupported(n.left, 'Property/destructuring assignment');
         return { ...m, kind: 'assign', target, value: expr(n.right) };
       }
-      if (!['+', '-', '*', '/', '%', '<', '<=', '>', '>=', '===', '!=='].includes(op)) unsupported(n, `Operator ${op}`);
+      if (!['+', '-', '*', '/', '%', '<', '<=', '>', '>=', '==', '!=', '===', '!=='].includes(op)) unsupported(n, `Operator ${op}`);
       return { ...m, kind: 'binary', op, left: expr(n.left), right: expr(n.right) };
     }
     if (ts.isPrefixUnaryExpression(n)) {
       const op = ts.tokenToString(n.operator)!;
-      if (!['-', '!'].includes(op)) unsupported(n, `Unary operator ${op}`);
+      if (!['-', '+', '!'].includes(op)) unsupported(n, `Unary operator ${op}`);
       return { ...m, kind: 'unary', op, operand: expr(n.operand) };
     }
     if (ts.isPropertyAccessExpression(n)) {

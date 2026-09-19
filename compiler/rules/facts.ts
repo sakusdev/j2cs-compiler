@@ -33,14 +33,31 @@ export function expressionFacts(e: SemanticExpr): Facts {
   if (e.kind === 'binary') {
     f.type('left', e.left.types, 'Left operand analysis before evaluation of right operand')
       .type('right', e.right.types, 'Right operand analysis');
+    if (e.op === '==' || e.op === '!=')
+      f.prove('operator.semantic', e.op === '==' ? 'abstract equality' : 'abstract inequality', 'Normalized operator semantics');
   }
-  if (e.kind === 'unary') f.type('operand', e.operand.types, 'Unary operand analysis');
+  if (e.kind === 'unary') f.type('operand', e.operand.types, 'Unary operand analysis')
+    .prove('operand.domain', 'primitive', 'All admitted operand values are finite primitive type sets');
   if (e.kind === 'read' || e.kind === 'call' || e.kind === 'assign') bindingFacts(f, e.binding);
   if (e.kind === 'assign') f.prove('reference.kind', 'mutable-lexical', 'Resolved writable initialized local/parameter');
   if (e.kind === 'call') {
     if (e.target === 'console') f.prove('member.integrity', 'pristine', 'Only direct resolved console.log calls, no mutations/escape');
-    else { functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
+    else if (typeof e.target === 'number') { functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
       .prove('function.parameterCount', e.arity, 'Resolved declaration signature'); }
+    else {
+      f.prove('call.argumentCount', e.args.length, 'AST intrinsic argument count');
+      const argument = e.args[0];
+      if (argument) f.type('argument', argument.types, 'Resolved first intrinsic argument type set')
+        .type('value', argument.types, 'Resolved first intrinsic argument type set')
+        .prove('argument.domain', 'primitive', 'Compiler profile admits only primitive argument values')
+        .prove('value.domain', 'primitive', 'Compiler profile admits only primitive argument values');
+      if (e.target === 'parseInt') {
+        f.prove('call.radixOmitted', e.args.length === 1, 'parseInt source arity');
+        const radix = e.args[1];
+        if (radix) f.type('radix', radix.types, 'Resolved parseInt radix type set')
+          .prove('radix.domain', 'primitive', 'Compiler profile admits only primitive radix values');
+      }
+    }
   }
   return f;
 }

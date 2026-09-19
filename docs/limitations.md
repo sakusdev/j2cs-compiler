@@ -3,15 +3,15 @@
 The compiler handles a closed, single-file primitive Node module. It is not a
 complete JavaScript engine, TypeScript type checker, Node implementation, or
 Electron application converter. The rule DB's 2,681 entries are knowledge-base
-coverage; **29 reviewed adapters** currently have executable lowering. These are
+coverage; **45 reviewed adapters** currently have executable lowering. These are
 different measures.
 
 ## Explicitly unsupported
 
 - `var`, loops, `switch`, destructuring, spread, template literals, optional chains,
-  logical/bitwise/compound operators, `++`/`--`, unary `+`, exponentiation and loose
-  equality. Number arithmetic and relational comparisons are supported; general
-  String-to-Number coercion and String ordering are not.
+  logical/bitwise/compound operators, `++`/`--` and exponentiation. Primitive unary
+  `+`, loose equality and relational coercion are supported, while binary `- * / %`
+  still require proven Number operands.
 - Objects, arrays, property/index access except direct `console.log`, classes,
   prototypes, getters, setters, Proxies, Symbols, BigInt and object identity tests.
 - Captured outer lexical bindings, nested/block functions, recursion, arrow/function
@@ -21,7 +21,7 @@ different measures.
   generators, Promises, exceptions and their completion/stack semantics.
 - TypeScript enums/namespaces/decorators, interfaces/type aliases, unions/generics,
   assertions and other syntax outside the documented scalar annotation subset.
-- Node APIs other than the admitted console subset; Electron/DOM services.
+- Node APIs other than the admitted console subset; Electron/DOM services. The pristine globals `isFinite`, `isNaN`, `parseFloat` and selected `parseInt` arities are supported only when their reviewed primitive rule requirements are proven; mixed unions that cannot satisfy a canonical specialization remain diagnostics.
 - `console.log` format substitution and object inspection. With multiple arguments,
   the first argument must be a non-String value or a **literal String without `%`**.
   Computed/variable first strings are conservatively rejected even when a human

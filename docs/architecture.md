@@ -77,7 +77,7 @@ type checker and does not report all TypeScript type errors.
 
 `source.pattern` remains descriptive data. The compiler never parses it as a
 regex and never interpolates `target.template`. `compiler/rules/adapters.json`
-contains 29 reviewed mappings from **existing rule IDs** to normalized AST
+contains 45 reviewed mappings from **existing rule IDs** to normalized AST
 selectors and implemented lowering opcodes. Each adapter pins the full rule
 file's SHA-256 after CRLF-to-LF normalization for cross-platform Git checkouts.
 A missing/changed reviewed rule is an error, not an opportunity
@@ -143,7 +143,8 @@ Canonical runtime/helper responsibilities remain separate from the compiler:
 - `JsValue.IsTruthy` implements primitive ToBoolean.
 - `JsOperators.Add` implements primitive addition, including the String branch.
 - `JsOperators.StrictEquals` distinguishes primitive tags and NaN.
-- `JsCoercion` handles the admitted primitive string/number conversions only.
+- `JsCoercion` handles primitive ToNumber/ToString/ToInt32 conversions, including StringToNumber grammar used by coercive operators.
+- `JsGlobals` and `JsNumber` implement the reviewed primitive `isFinite`/`isNaN`/`parseFloat`/`parseInt` paths.
 - `JsNumber` supplies invariant shortest binary64 formatting with JS notation
   thresholds; `console.log` inspection preserves `-0` while string coercion does not.
 - `JsConsole` implements the documented primitive, non-format-substitution host

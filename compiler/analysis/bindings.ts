@@ -8,7 +8,8 @@ export interface Bindings {
   references: Map<number, Binding>; declarations: Map<number, Binding>; functions: Binding[];
 }
 interface Scope { parent?: Scope; owner: number; names: Map<string, Binding> }
-const intrinsics = ['undefined', 'NaN', 'Infinity', 'console'];
+const intrinsics = ['undefined', 'NaN', 'Infinity', 'console', 'isFinite', 'isNaN', 'parseFloat', 'parseInt'];
+const callableIntrinsics = new Set(['isFinite', 'isNaN', 'parseFloat', 'parseInt']);
 export function resolveBindings(program: Program): Bindings {
   let nextId = 0;
   const references = new Map<number, Binding>(), declarations = new Map<number, Binding>(), functions: Binding[] = [];
@@ -37,6 +38,8 @@ export function resolveBindings(program: Program): Bindings {
         const b = resolve(n, s);
         if (b.kind === 'function' && use !== 'callee') fail('E_FUNCTION_VALUE', 'Function identity/escape is unsupported; use a direct call.', n.span);
         if (b.kind === 'intrinsic' && b.name === 'console' && use !== 'receiver') fail('E_INTRINSIC_ESCAPE', 'console may only be used as the direct receiver of console.log.', n.span);
+        if (b.kind === 'intrinsic' && callableIntrinsics.has(b.name) && use !== 'callee')
+          fail('E_INTRINSIC_ESCAPE', `${b.name} may only be used as a direct intrinsic call.`, n.span);
         return;
       }
       case 'binary': expr(n.left, s); expr(n.right, s); return;

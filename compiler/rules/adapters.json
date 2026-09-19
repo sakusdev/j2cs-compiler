@@ -255,6 +255,270 @@
         "kind": "condition"
       },
       "lowering": "helper.truthiness"
+    },
+    {
+      "ruleId": "operators.loose-equality",
+      "sha256": "096fd407e0c197660cb320fee923913cc68d00b06f066ec5a4d3e49e2a6d3711",
+      "selector": {
+        "kind": "binary",
+        "operator": "=="
+      },
+      "lowering": "helper.looseEquals",
+      "requires": [
+        {
+          "fact": "operands.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.loose-inequality",
+      "sha256": "a5ccd0133101aafb10ccf4383f600a83792055bd404e55c387fe6a1af82bc316",
+      "selector": {
+        "kind": "binary",
+        "operator": "!="
+      },
+      "lowering": "helper.looseNotEquals",
+      "requires": [
+        {
+          "fact": "operands.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.less-than.dynamic",
+      "sha256": "cd36502230ac82d1c1bc986b436e0fd4f6cd74c774a328f61d5593c74994910a",
+      "selector": {
+        "kind": "binary",
+        "operator": "<"
+      },
+      "lowering": "helper.lessThan",
+      "requires": [
+        {
+          "fact": "operands.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.less-than-or-equal.dynamic",
+      "sha256": "e11d2a9faf474cb280c31ec9395e85ee0668f1032f97f8d5cf1061168886c0ef",
+      "selector": {
+        "kind": "binary",
+        "operator": "<="
+      },
+      "lowering": "helper.lessThanOrEqual",
+      "requires": [
+        {
+          "fact": "operands.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.greater-than.dynamic",
+      "sha256": "f823c2e1a0993b5d932cc9173c7ee0afd15c6473803907b32a46d0c6cf73a382",
+      "selector": {
+        "kind": "binary",
+        "operator": ">"
+      },
+      "lowering": "helper.greaterThan",
+      "requires": [
+        {
+          "fact": "operands.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.greater-than-or-equal.dynamic",
+      "sha256": "84d3092203c1805219626f793a9e306dbadfc1f0e655d0f7001a23d2a929c233",
+      "selector": {
+        "kind": "binary",
+        "operator": ">="
+      },
+      "lowering": "helper.greaterThanOrEqual",
+      "requires": [
+        {
+          "fact": "operands.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "operators.unary-plus.dynamic",
+      "sha256": "b936f90a138ebb714ab9ae00a0145104d1edc49423e5ffea09ebb2d1355d8d20",
+      "selector": {
+        "kind": "unary",
+        "operator": "+"
+      },
+      "lowering": "helper.toNumber",
+      "requires": [
+        {
+          "fact": "operand.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "global.is-finite.number",
+      "sha256": "4907241b3975f67d0c97a6aa9b5b6156816926fb69313c07e16d20ea2e371ba0",
+      "selector": {
+        "kind": "call.intrinsic",
+        "intrinsic": "isFinite"
+      },
+      "lowering": "intrinsic.isFinite.number",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 1
+        }
+      ]
+    },
+    {
+      "ruleId": "global.is-finite.primitive",
+      "sha256": "20f149997091da1c1c53bc00a36d13e159d5c4161173f144ec18c34ca6af157a",
+      "selector": {
+        "kind": "call.intrinsic",
+        "intrinsic": "isFinite"
+      },
+      "lowering": "helper.isFinite.primitive",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 1
+        },
+        {
+          "fact": "argument.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "global.is-nan.number",
+      "sha256": "e2b7f9cfe14be1bb476b38d4da3fff3a0e66ff03f882e7cdc4039287cd54389c",
+      "selector": {
+        "kind": "call.intrinsic",
+        "intrinsic": "isNaN"
+      },
+      "lowering": "intrinsic.isNaN.number",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 1
+        }
+      ]
+    },
+    {
+      "ruleId": "global.is-nan.primitive",
+      "sha256": "80049f49ce7b68b74043df529db39ad91b1c7b16c5b5e62b267c73b12f63c798",
+      "selector": {
+        "kind": "call.intrinsic",
+        "intrinsic": "isNaN"
+      },
+      "lowering": "helper.isNaN.primitive",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 1
+        },
+        {
+          "fact": "argument.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "global.parse-float.string",
+      "sha256": "f017949ec58f6ee140ced28183fc96443f569d13b21a21b03d0cb7de005bc92b",
+      "selector": {
+        "kind": "call.intrinsic",
+        "intrinsic": "parseFloat"
+      },
+      "lowering": "helper.parseFloat.string",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 1
+        }
+      ]
+    },
+    {
+      "ruleId": "global.parse-float.primitive",
+      "sha256": "3ced735768f9de1647899761d3da61b21eeeb7db62ee5c2c11d4e18432b13ca2",
+      "selector": {
+        "kind": "call.intrinsic",
+        "intrinsic": "parseFloat"
+      },
+      "lowering": "helper.parseFloat.primitive",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 1
+        },
+        {
+          "fact": "argument.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "global.parse-int.string-default",
+      "sha256": "1d0cc61967000bfdd6684a478465888903892df45672cab77b13807f43b6eb55",
+      "selector": {
+        "kind": "call.intrinsic",
+        "intrinsic": "parseInt"
+      },
+      "lowering": "helper.parseInt.stringDefault",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 1
+        }
+      ]
+    },
+    {
+      "ruleId": "global.parse-int.string-known-radix",
+      "sha256": "86431d153bce45249576cf7401e925a3330c7941fe95c62e38ec4d230beb5ad9",
+      "selector": {
+        "kind": "call.intrinsic",
+        "intrinsic": "parseInt"
+      },
+      "lowering": "helper.parseInt.stringKnownRadix",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 2
+        },
+        {
+          "fact": "radix.domain",
+          "equals": "primitive"
+        }
+      ]
+    },
+    {
+      "ruleId": "global.parse-int.primitive",
+      "sha256": "9ba2c759ffe58b69e6a288a18b80ff6d98ca22474c8d87e174a4466b8d3b590c",
+      "selector": {
+        "kind": "call.intrinsic",
+        "intrinsic": "parseInt"
+      },
+      "lowering": "helper.parseInt.primitive",
+      "requires": [
+        {
+          "fact": "call.argumentCount",
+          "equals": 2
+        },
+        {
+          "fact": "value.domain",
+          "equals": "primitive"
+        },
+        {
+          "fact": "radix.domain",
+          "equals": "primitive"
+        }
+      ]
     }
   ]
 }

@@ -51,13 +51,14 @@ structured diagnostics including source location and failed rule proofs.
 | Literals | Number (binary64), String (UTF-16), Boolean, null |
 | Intrinsic values | Unshadowed `undefined`, `NaN`, `Infinity` |
 | Variables | Block-scoped `const` / `let`, binding resolution, local `=`; omitted `let` initializer becomes undefined |
-| Arithmetic | Number `+ - * / %`, unary `-`; primitive String concatenation and coercing primitive `+` |
-| Comparisons | Number `< <= > >=`; primitive `===` / `!==` |
+| Arithmetic | Number `+ - * / %`, unary `-`; primitive unary `+`/ToNumber; primitive String concatenation and coercing primitive `+` |
+| Comparisons | Number-native and primitive-coercing `< <= > >=`; primitive `===` / `!==` and `==` / `!=` |
 | Statements | Expression statements, blocks, `if` / `else`, `return`, empty statements |
 | Conditions | JavaScript primitive truthiness and `!` |
 | Functions | Top-level ordinary declarations; known direct calls, exact arity, primitive parameters/results, hoisting, bare/fallthrough return |
 | TypeScript | Erasable scalar variable/parameter/return annotations; annotations are **not** trusted as runtime facts |
 | Host output | `console.log` for primitives; multiple arguments when the first is proven non-String or a literal String without `%` |
+| Global coercive intrinsics | Direct pristine `isFinite`, `isNaN`, `parseFloat`, and reviewed `parseInt` arities when canonical rule requirements are proven |
 
 The supported profile is a **closed single-file Node module with pristine
 intrinsics**. No injected globals, preload scripts, or external callable entry

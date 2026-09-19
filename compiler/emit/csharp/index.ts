@@ -17,7 +17,11 @@ function number(value: number): string {
   if (Object.is(value, -0)) return '-0.0d';
   return `${value}d`;
 }
-const calls = new Set(['JsValue.IsTruthy', 'JsOperators.Add', 'JsOperators.StrictEquals', 'JsReference.Assign', 'JsConsole.Log', 'string.Concat']);
+const calls = new Set(['JsValue.IsTruthy', 'JsOperators.Add', 'JsOperators.StrictEquals', 'JsOperators.LooseEquals',
+  'JsOperators.LessThan', 'JsOperators.LessThanOrEqual', 'JsOperators.GreaterThan', 'JsOperators.GreaterThanOrEqual',
+  'JsCoercion.ToNumberPrimitive', 'JsCoercion.ToInt32Primitive', 'JsGlobals.IsFinitePrimitive', 'JsGlobals.IsNaNPrimitive',
+  'JsGlobals.ParseFloatPrimitive', 'JsGlobals.ParseIntPrimitive', 'JsNumber.ParseFloatPrimitive', 'JsNumber.ParseIntPrimitive',
+  'double.IsFinite', 'double.IsNaN', 'JsReference.Assign', 'JsConsole.Log', 'string.Concat']);
 function expr(e: CsExpr): string {
   switch (e.kind) {
     case 'literal': return e.repr === 'number' ? number(e.value) : e.repr === 'string' ? quote(e.value) : String(e.value);

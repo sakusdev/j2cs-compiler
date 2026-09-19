@@ -7,7 +7,7 @@ export type SemanticExpr = Node & { types: TypeSet } & (
   | { kind: 'binary'; op: string; left: SemanticExpr; right: SemanticExpr }
   | { kind: 'unary'; op: string; operand: SemanticExpr }
   | { kind: 'assign'; binding: Binding; value: SemanticExpr }
-  | { kind: 'call'; target: 'console' | number; args: SemanticExpr[]; binding: Binding; arity: number }
+  | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt' | number; args: SemanticExpr[]; binding: Binding; arity: number }
 );
 export type SemanticStatement = Node & (
   | { kind: 'variable'; binding: Binding; initializer: SemanticExpr }
