@@ -109,11 +109,15 @@ public sealed class DesktopProtocol
 {
     private readonly IDesktopPlatformAdapter _platform;
     private event Action<string>? _deepLinkReceived;
+    private bool _routingEnabled;
 
-    internal DesktopProtocol(IDesktopPlatformAdapter platform)
+    internal DesktopProtocol(IDesktopPlatformAdapter platform) => _platform = platform;
+
+    public void EnableDeepLinkRouting()
     {
-        _platform = platform;
+        if (_routingEnabled) return;
         _platform.SetDeepLinkHandler(DispatchDeepLink);
+        _routingEnabled = true;
     }
 
     public event Action<string> DeepLinkReceived
