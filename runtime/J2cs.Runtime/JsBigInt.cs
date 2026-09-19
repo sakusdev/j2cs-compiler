@@ -23,6 +23,17 @@ public sealed class JsBinaryBigIntException : Exception
         => Kind = kind;
 }
 
+public readonly struct JsStringToBigIntResult
+{
+    private readonly JsBigInt value;
+    public bool Success { get; }
+    public JsBigInt Value => Success ? value : throw new InvalidOperationException("StringToBigInt returned its failure sentinel.");
+
+    private JsStringToBigIntResult(bool success, JsBigInt value) => (Success, this.value) = (success, value);
+    public static JsStringToBigIntResult FromValue(JsBigInt value) => new(true, value);
+    public static JsStringToBigIntResult Failure => new(false, default);
+}
+
 /// <summary>
 /// Exact JavaScript BigInt payload. It never passes through binary64 storage.
 /// </summary>
