@@ -36,6 +36,21 @@ test('object/array core selects canonical safe rules and preserves identity in e
   assert.match(r.source, /JsObject\.Create\(\)/); assert.match(r.source, /JsArray\.Create\(3d\)/);
   assert.ok(!/\bdynamic\b|\bobject\b/.test(r.source));
 });
+test('parser normalizes classic loops and mutation operators', () => {
+  const ast = parse('for (let i=0; i<2; i++) { while (false) { break; } }');
+  assert.equal(ast.body[0]?.kind, 'for');
+  assert.equal(ast.body[0]?.kind === 'for' && ast.body[0].update?.kind, 'update');
+});
+test('canonical mutation adapters are selected only with proof', () => {
+  const r = compile('let x=1; x += 2; x++; --x;', index);
+  assert.ok(r.trace.some(t => t.ruleId === 'operators.addition-assignment'));
+  assert.ok(r.trace.some(t => t.ruleId === 'operators.postfix-increment'));
+  assert.ok(r.trace.some(t => t.ruleId === 'operators.prefix-decrement'));
+});
+test('loop fixed point widens mutated bindings before lowering following expressions', () => {
+  const r = compile("let v=1; let i=0; while(i<1){v='x'; i++;} console.log(v+1);", index);
+  assert.ok(r.trace.some(t => t.ruleId === 'operators.addition.dynamic'));
+});
 test('type annotations are not semantic evidence', () => {
   const r = compile("const x: number = 'a'; console.log(x + 1);", index, 'input.ts');
   assert.ok(r.trace.some(t => t.ruleId === 'operators.addition.dynamic'));
@@ -47,9 +62,15 @@ test('shadowed intrinsic names stay lexical', () => {
 const diagnostics: [string, string, string][] = [
   ['parse error', 'const = ;', 'E_PARSE'],
   ['var', 'var x = 1;', 'E_UNSUPPORTED_SYNTAX'],
-  ['loop', 'while (true) {}', 'E_UNSUPPORTED_SYNTAX'],
   ['bigint', 'const x = 1n;', 'E_UNSUPPORTED_SYNTAX'],
   ['loose equality', 'console.log(1 == true);', 'E_UNSUPPORTED_SYNTAX'],
+  ['for-in', 'for (const k in value) {}', 'E_UNSUPPORTED_SYNTAX'],
+  ['for-of', 'for (const x of [1]) {}', 'E_UNSUPPORTED_SYNTAX'],
+  ['const update', 'const x=1; x++;', 'E_IMMUTABLE_WRITE'],
+  ['unsafe string update', "let x='1'; x++;", 'E_NO_SAFE_RULE'],
+  ['unsafe numeric compound coercion', "let x=5; x -= '2';", 'E_NO_SAFE_RULE'],
+  ['for lexical scope', 'for (let i=0;i<1;i++) {} console.log(i);', 'E_UNRESOLVED_BINDING'],
+  ['object allocation in loop', 'let i=0; while(i<1){ const x={a:1}; i++; }', 'E_OBJECT_LOOP_ALLOCATION'],
   ['dynamic computed property', "const o={x:1}; const k='x'; console.log(o[k]);", 'E_UNSUPPORTED_SYNTAX'],
   ['object proto literal', 'const x={__proto__: null};', 'E_UNSUPPORTED_SYNTAX'],
   ['prototype read', 'const x={}; console.log(x.toString);', 'E_PROTOTYPE_PROPERTY'],
