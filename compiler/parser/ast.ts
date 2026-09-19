@@ -1,13 +1,16 @@
 import type { Span } from '../diagnostics/index.js';
 export interface Node { id: number; span: Span }
 export type LiteralValue = number | string | boolean | null;
+export interface ObjectProperty { key: string; value: Expr }
 export type Expr = Node & (
   | { kind: 'literal'; value: LiteralValue }
   | { kind: 'identifier'; name: string }
   | { kind: 'binary'; op: string; left: Expr; right: Expr }
   | { kind: 'unary'; op: string; operand: Expr }
-  | { kind: 'assign'; target: Expr & { kind: 'identifier' }; value: Expr }
+  | { kind: 'assign'; target: (Expr & { kind: 'identifier' }) | (Expr & { kind: 'member' }); value: Expr }
   | { kind: 'member'; object: Expr; property: string }
+  | { kind: 'object'; properties: ObjectProperty[] }
+  | { kind: 'array'; elements: (Expr | null)[] }
   | { kind: 'call'; callee: Expr; args: Expr[] }
 );
 export interface Parameter extends Node { name: string }
