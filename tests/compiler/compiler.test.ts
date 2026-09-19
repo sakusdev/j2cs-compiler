@@ -59,11 +59,20 @@ test('shadowed intrinsic names stay lexical', () => {
   const r = compile('const NaN = 42; console.log(NaN);', index);
   assert.ok(!r.trace.some(t => t.ruleId === 'values.nan.intrinsic-binding'));
 });
+test('coercive primitive operators and globals select canonical j2cs adapters', () => {
+  const r = compile("console.log('5' == 5, '2' < 10, +' 42 ', isFinite('3'), isNaN('x'), parseFloat('1.5x'), parseInt('10', 2));", index);
+  const ids = new Set(r.trace.map(t => t.ruleId));
+  for (const id of ['operators.loose-equality', 'operators.less-than.dynamic', 'operators.unary-plus.dynamic',
+    'global.is-finite.primitive', 'global.is-nan.primitive', 'global.parse-float.string',
+    'global.parse-int.string-known-radix']) assert.ok(ids.has(id), `missing ${id}`);
+  const native = compile('console.log(isFinite(3), isNaN(NaN));', index);
+  assert.ok(native.trace.some(t => t.ruleId === 'global.is-finite.number' && t.strategy === 'native'));
+  assert.ok(native.trace.some(t => t.ruleId === 'global.is-nan.number' && t.strategy === 'native'));
+});
 const diagnostics: [string, string, string][] = [
   ['parse error', 'const = ;', 'E_PARSE'],
   ['var', 'var x = 1;', 'E_UNSUPPORTED_SYNTAX'],
   ['bigint', 'const x = 1n;', 'E_UNSUPPORTED_SYNTAX'],
-  ['loose equality', 'console.log(1 == true);', 'E_UNSUPPORTED_SYNTAX'],
   ['for-in', 'for (const k in value) {}', 'E_UNSUPPORTED_SYNTAX'],
   ['for-of', 'for (const x of [1]) {}', 'E_UNSUPPORTED_SYNTAX'],
   ['const update', 'const x=1; x++;', 'E_IMMUTABLE_WRITE'],
@@ -108,6 +117,7 @@ const diagnostics: [string, string, string][] = [
   ['indirect call', 'const x=1; x();', 'E_INDIRECT_CALL'],
   ['return outside function', 'return 1;', 'E_PARSE'],
   ['unsupported numeric coercion', "console.log('3' - 1);", 'E_NO_SAFE_RULE'],
+  ['mixed primitive union intrinsic', "let x=1; if (true) x='1'; console.log(isFinite(x));", 'E_NO_SAFE_RULE'],
   ['eval', "eval('1');", 'E_UNRESOLVED_BINDING'],
   ['this', 'function f(){return this;}', 'E_UNSUPPORTED_SYNTAX'],
   ['argument access', 'function f(){return arguments;}', 'E_UNRESOLVED_BINDING'],
