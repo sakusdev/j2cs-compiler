@@ -189,24 +189,53 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
     }
   }
-  function instantiate(b: Binding, args: SE[], callNode: Node): SemanticFunction {
+  function instantiate(b: Binding, args: SE[], callNode: Node, mode: 'call' | 'construct' = 'call'): InstanceSummary {
     const fn = b.function!;
-    if (args.length !== fn.params.length) fail('E_ARITY', 'Only exact-arity direct function calls are supported.', callNode.span);
+    if (args.length !== fn.params.length) fail('E_ARITY', 'Only exact-arity direct function calls/constructions are supported.', callNode.span);
     if (args.some(a => hasReference(a.types)))
       fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object/Array arguments require alias/effect summaries and are deferred.', callNode.span);
     if (active.has(b.id)) fail('E_RECURSION', 'Recursive call graphs require a summary fixed point; unsupported in this MVP.', callNode.span);
-    const key = `${b.id}:${args.map(a => a.types.join('|')).join(',')}`;
+    const key = `${mode}:${b.id}:${args.map(a => a.types.join('|')).join(',')}`;
     const found = cache.get(key); if (found) return found;
     active.add(b.id);
     const instanceId = nextInstance++, params = fn.params.map(p => bindings.declarations.get(p.id)!);
-    const f: Flow = { env: new Map(params.map((p, i) => [p.id, valueOf(args[i]!)])), heap: new Map(), reachable: true, returns: [], loopDepth: 0 };
-    const body = statements(fn.body.body, f);
-    if (f.reachable) {
-      const value = syntheticUndefined(fn.body);
-      body.push({ ...fn.body, kind: 'return', value }); f.returns.push(value.types);
+    const heap = new Map<number, Shape>();
+    const receiverRef = mode === 'construct' ? -(instanceId + 1) : undefined;
+    if (receiverRef !== undefined) heap.set(receiverRef, { kind: 'Object', properties: new Map() });
+    const context: InvocationContext = {
+      mode, binding: b, instanceId, observes: new Set(),
+      ...(receiverRef !== undefined ? { receiverRef, receiver: { types: ['Object'], refs: [receiverRef] }, outcomes: [] } : {}),
+    };
+    const flow: Flow = {
+      env: new Map(params.map((p, i) => [p.id, valueOf(args[i]!) ])), heap,
+      reachable: true, returns: [], loopDepth: 0,
+    };
+    invocations.push(context);
+    try {
+      const body = statements(fn.body.body, flow);
+      if (flow.reachable) {
+        const value = syntheticUndefined(fn.body);
+        if (mode === 'construct') context.outcomes!.push({ returned: valueOf(value), heap: cloneHeap(flow.heap) });
+        body.push({ ...fn.body, kind: 'return', value }); flow.returns.push(value.types);
+      }
+      const returnTypes = union(...flow.returns);
+      const instance: SemanticFunction = {
+        ...fn, instanceId, binding: b, params, body, returnTypes, mode,
+        observes: [...context.observes].sort(), usedWithNew: false,
+        ...(mode === 'construct' ? {
+          thisSlot: `t${instanceId}`, constructorTemplateId: b.id,
+          mayReturnObject: returnTypes.some(type => type === 'Object' || type === 'Array'),
+        } : {}),
+      };
+      const summary: InstanceSummary = { instance };
+      if (mode === 'construct') {
+        const construction = summarizeConstruction(context, callNode.span);
+        summary.constructTypes = construction.types; summary.constructShape = construction.shape;
+      }
+      instances.push(instance); cache.set(key, summary); return summary;
+    } finally {
+      invocations.pop(); active.delete(b.id);
     }
-    const instance: SemanticFunction = { ...fn, instanceId, binding: b, params, body, returnTypes: union(...f.returns) };
-    instances.push(instance); cache.set(key, instance); active.delete(b.id); return instance;
   }
 
   function expression(n: Expr, f: Flow): SE {
