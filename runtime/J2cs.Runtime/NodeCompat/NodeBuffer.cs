@@ -36,8 +36,11 @@ public sealed class NodeBuffer : JsObject
     }
 
     public static NodeBuffer From(string value, string encoding = "utf8")
-        => new(Encode(value ?? throw new ArgumentNullException(nameof(value)), ParseEncoding(encoding)), 0,
-            Encode(value, ParseEncoding(encoding)).Length);
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var bytes = Encode(value, ParseEncoding(encoding));
+        return new NodeBuffer(bytes, 0, bytes.Length);
+    }
 
     public static NodeBuffer From(byte[] value)
     {
