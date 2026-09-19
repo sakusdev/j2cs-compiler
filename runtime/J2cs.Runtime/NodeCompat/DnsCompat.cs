@@ -1,1 +1,89 @@
-using System.Net;\nusing System.Net.Sockets;\n\nnamespace J2cs.Runtime.NodeCompat;\n\npublic sealed class NodeNetworkException : Exception\n{\n    public string Code { get; }\n\n    public NodeNetworkException(string code, string message, Exception? innerException = null)\n        : base(message, innerException) => Code = code;\n\n    internal static NodeNetworkException FromSocket(SocketException error, string operation)\n    {\n        var code = error.SocketErrorCode switch\n        {\n            SocketError.HostNotFound or SocketError.NoData => "ENOTFOUND",\n            SocketError.TryAgain => "EAI_AGAIN",\n            SocketError.ConnectionRefused => "ECONNREFUSED",\n            SocketError.ConnectionReset => "ECONNRESET",\n            SocketError.TimedOut => "ETIMEDOUT",\n            SocketError.AddressAlreadyInUse => "EADDRINUSE",\n            SocketError.AddressNotAvailable => "EADDRNOTAVAIL",\n            _ => "EUNKNOWN"\n        };\n        return new NodeNetworkException(code, $"{operation}: {error.Message}", error);\n    }\n}\n\npublic readonly record struct NodeDnsAddress(string Address, int Family);\n\npublic static class NodeDns\n{\n    public static async Task<NodeDnsAddress> LookupAsync(\n        string hostname,\n        int family = 0,\n        CancellationToken cancellationToken = default)\n    {\n        var addresses = await LookupAllAsync(hostname, family, cancellationToken).ConfigureAwait(false);\n        if (addresses.Count == 0)\n            throw new NodeNetworkException("ENOTFOUND", $"getaddrinfo ENOTFOUND {hostname}");\n        return addresses[0];\n    }\n\n    public static async Task<IReadOnlyList<NodeDnsAddress>> LookupAllAsync(\n        string hostname,\n        int family = 0,\n        CancellationToken cancellationToken = default)\n    {\n        if (string.IsNullOrEmpty(hostname))\n            throw new NodeNetworkException("ERR_INVALID_ARG_VALUE", "hostname must be a non-empty string");\n        if (family is not 0 and not 4 and not 6)\n            throw new NodeNetworkException("ERR_INVALID_ARG_VALUE", "family must be 0, 4, or 6");\n\n        if (IPAddress.TryParse(hostname, out var literal))\n        {\n            var literalFamily = FamilyOf(literal);\n            if (family != 0 && family != literalFamily)\n                throw new NodeNetworkException("ENOTFOUND", $"getaddrinfo ENOTFOUND {hostname}");\n            return new[] { new NodeDnsAddress(literal.ToString(), literalFamily) };\n        }\n\n        IPAddress[] addresses;\n        try\n        {\n            addresses = await Dns.GetHostAddressesAsync(hostname).WaitAsync(cancellationToken).ConfigureAwait(false);\n        }\n        catch (SocketException error)\n        {\n            throw NodeNetworkException.FromSocket(error, "getaddrinfo");\n        }\n\n        var result = addresses\n            .Select(address => new NodeDnsAddress(address.ToString(), FamilyOf(address)))\n            .Where(address => family == 0 || address.Family == family)\n            .ToArray();\n\n        if (result.Length == 0)\n            throw new NodeNetworkException("ENOTFOUND", $"getaddrinfo ENOTFOUND {hostname}");\n        return result;\n    }\n\n    private static int FamilyOf(IPAddress address) => address.AddressFamily switch\n    {\n        AddressFamily.InterNetwork => 4,\n        AddressFamily.InterNetworkV6 => 6,\n        _ => throw new NodeNetworkException("EAFNOSUPPORT", $"Unsupported address family {address.AddressFamily}")\n    };\n}\n
+using System.Net;
+using System.Net.Sockets;
+
+namespace J2cs.Runtime.NodeCompat;
+
+public sealed class NodeNetworkException : Exception
+{
+    public string Code { get; }
+
+    public NodeNetworkException(string code, string message, Exception? innerException = null)
+        : base(message, innerException) => Code = code;
+
+    internal static NodeNetworkException FromSocket(SocketException error, string operation)
+    {
+        var code = error.SocketErrorCode switch
+        {
+            SocketError.HostNotFound or SocketError.NoData => "ENOTFOUND",
+            SocketError.TryAgain => "EAI_AGAIN",
+            SocketError.ConnectionRefused => "ECONNREFUSED",
+            SocketError.ConnectionReset => "ECONNRESET",
+            SocketError.TimedOut => "ETIMEDOUT",
+            SocketError.AddressAlreadyInUse => "EADDRINUSE",
+            SocketError.AddressNotAvailable => "EADDRNOTAVAIL",
+            _ => "EUNKNOWN"
+        };
+        return new NodeNetworkException(code, $"{operation}: {error.Message}", error);
+    }
+}
+
+public readonly record struct NodeDnsAddress(string Address, int Family);
+
+public static class NodeDns
+{
+    public static async Task<NodeDnsAddress> LookupAsync(
+        string hostname,
+        int family = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var addresses = await LookupAllAsync(hostname, family, cancellationToken).ConfigureAwait(false);
+        if (addresses.Count == 0)
+            throw new NodeNetworkException("ENOTFOUND", $"getaddrinfo ENOTFOUND {hostname}");
+        return addresses[0];
+    }
+
+    public static async Task<IReadOnlyList<NodeDnsAddress>> LookupAllAsync(
+        string hostname,
+        int family = 0,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(hostname))
+            throw new NodeNetworkException("ERR_INVALID_ARG_VALUE", "hostname must be a non-empty string");
+        if (family is not 0 and not 4 and not 6)
+            throw new NodeNetworkException("ERR_INVALID_ARG_VALUE", "family must be 0, 4, or 6");
+
+        if (IPAddress.TryParse(hostname, out var literal))
+        {
+            var literalFamily = FamilyOf(literal);
+            if (family != 0 && family != literalFamily)
+                throw new NodeNetworkException("ENOTFOUND", $"getaddrinfo ENOTFOUND {hostname}");
+            return new[] { new NodeDnsAddress(literal.ToString(), literalFamily) };
+        }
+
+        IPAddress[] addresses;
+        try
+        {
+            addresses = await Dns.GetHostAddressesAsync(hostname).WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (SocketException error)
+        {
+            throw NodeNetworkException.FromSocket(error, "getaddrinfo");
+        }
+
+        var result = addresses
+            .Select(address => new NodeDnsAddress(address.ToString(), FamilyOf(address)))
+            .Where(address => family == 0 || address.Family == family)
+            .ToArray();
+
+        if (result.Length == 0)
+            throw new NodeNetworkException("ENOTFOUND", $"getaddrinfo ENOTFOUND {hostname}");
+        return result;
+    }
+
+    private static int FamilyOf(IPAddress address) => address.AddressFamily switch
+    {
+        AddressFamily.InterNetwork => 4,
+        AddressFamily.InterNetworkV6 => 6,
+        _ => throw new NodeNetworkException("EAFNOSUPPORT", $"Unsupported address family {address.AddressFamily}")
+    };
+}
