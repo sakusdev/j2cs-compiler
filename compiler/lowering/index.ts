@@ -4,7 +4,7 @@ import type { Binding } from '../analysis/bindings.js';
 import type { SemanticExpr as SE, SemanticProgram, SemanticStatement as SS } from '../ir/semantic.js';
 import { box, unbox, type CsExpr as CE, type CsProgram, type CsStatement as CS } from '../ir/csharp.js';
 import { RuleIndex, type Candidate, type Selector } from '../rules/index.js';
-import { declarationFacts, expressionFacts, programFacts } from '../rules/facts.js';
+import { declarationFacts, expressionFacts, parameterFacts, programFacts } from '../rules/facts.js';
 import type { FactModel } from '../analysis/facts.js';
 export interface Trace {
   ruleId: string; strategy: string; lowering: string; span: Span; sha256: string;
@@ -14,6 +14,7 @@ export interface LoweredProgram { ir: CsProgram; trace: Trace[]; structuralContr
 const variable = (b: Binding): string => `b${b.id}`;
 const call = (target: string, args: CE[], repr: CE['repr'] = 'value'): CE => ({ kind: 'call', target, args, repr });
 const read = (b: Binding): CE => ({ kind: 'read', repr: 'value', name: variable(b) });
+const readArguments = (b: Binding): CE => ({ kind: 'read', repr: 'arguments', name: variable(b) });
 const ref = (b: Binding): CE => ({ kind: 'ref', repr: 'value', name: variable(b) });
 const undef = (): CE => ({ kind: 'member', repr: 'value', name: 'JsUndefined.Value' });
 const stringLiteral = (value: string): CE => ({ kind: 'literal', repr: 'string', value });
@@ -46,6 +47,17 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
         }
         contracts.add(`core.literal.${typeof e.value}`);
         return typeof e.value === 'string' ? box({ kind: 'literal', repr: 'string', value: e.value }) : box({ kind: 'literal', repr: 'boolean', value: e.value });
+      case 'spread': return fail('E_LOWERING', 'Spread must be consumed by direct-call argument packing.', e.span);
+      case 'argumentsLength': {
+        const op = select({ kind: 'arguments.length' }, facts, e.span);
+        if (op !== 'arguments.length') fail('E_LOWERING', 'arguments.length adapter has no implementation.', e.span);
+        return box(call('JsArguments.Length', [readArguments(e.binding)], 'number'));
+      }
+      case 'argumentsIndex': {
+        const op = select({ kind: 'arguments.index' }, facts, e.span);
+        if (op !== 'arguments.index') fail('E_LOWERING', 'arguments index adapter has no implementation.', e.span);
+        return call('JsArguments.Get', [readArguments(e.binding), numberLiteral(e.index)]);
+      }
       case 'object': {
         contracts.add('core.object-literal.ordinary-data-v1');
         let result = call('JsObject.Create', []);
@@ -157,8 +169,24 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           return box(call('JsObject.HasOwn', [expression(e.receiver), stringLiteral(e.property)], 'boolean'));
         }
         if (typeof e.target === 'number') {
-          select({ kind: 'call.function' }, facts, e.span);
-          return call(`F${e.target}`, e.args.map(expression));
+          let packed: CE;
+          if (e.callKind === 'spread') {
+            const op = select({ kind: 'call.spread' }, facts, e.span);
+            if (op !== 'call.spread') fail('E_LOWERING', 'Call spread adapter has no implementation.', e.span);
+            packed = call('JsArguments.Empty', [], 'arguments');
+            for (const arg of e.args) {
+              packed = arg.kind === 'spread'
+                ? call('JsArguments.Rest', [packed, expression(arg.operand)], 'arguments')
+                : call('JsArguments.Create', [packed, expression(arg)], 'arguments');
+            }
+          } else {
+            if (e.callKind === 'missing') select({ kind: 'call.function.missing' }, facts, e.span);
+            else if (e.callKind === 'extra') select({ kind: 'call.function.extra' }, facts, e.span);
+            else if (e.callKind === 'exact') select({ kind: 'call.function' }, facts, e.span);
+            else contracts.add('core.function.call-nonsimple-exact-v1');
+            packed = call('JsArguments.Create', e.args.map(expression), 'arguments');
+          }
+          return call(`F${e.target}`, [packed]);
         }
         const op = select({ kind: 'call.intrinsic', intrinsic: e.target }, facts, e.span);
         const args = e.args.map(expression);
@@ -215,8 +243,36 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
     }
   }
   const functions = program.functions.map(fn => {
-    select({ kind: 'function' }, declarationFacts(fn), fn.span);
-    return { name: `F${fn.instanceId}`, params: fn.params.map(variable), body: fn.body.map(statement) };
+    if (fn.simpleParameters && !fn.observesArguments) select({ kind: 'function' }, declarationFacts(fn), fn.span);
+    else contracts.add('core.function.arguments-frame-v1');
+    const args = readArguments(fn.argumentsBinding);
+    const prefix: CS[] = [];
+    for (const p of fn.params) {
+      if (p.rest) {
+        const op = select({ kind: 'parameter.rest' }, parameterFacts('rest'), p.binding.declaration?.span ?? fn.span);
+        if (op !== 'parameter.rest') fail('E_LOWERING', 'Rest parameter adapter has no implementation.', fn.span);
+        prefix.push({ kind: 'variable', name: variable(p.binding),
+          initializer: call('JsArguments.Rest', [args, numberLiteral(p.index)]) });
+        continue;
+      }
+      if (p.hasDefault) {
+        const op = select({ kind: 'parameter.default' }, parameterFacts('default'), p.binding.declaration?.span ?? fn.span);
+        if (op !== 'parameter.default') fail('E_LOWERING', 'Default parameter adapter has no implementation.', fn.span);
+      }
+      if (p.initialization === 'default-always') {
+        prefix.push({ kind: 'variable', name: variable(p.binding), initializer: expression(p.initializer!) });
+        continue;
+      }
+      prefix.push({ kind: 'variable', name: variable(p.binding),
+        initializer: call('JsArguments.Get', [args, numberLiteral(p.index)]) });
+      if (p.initialization === 'default-conditional') {
+        prefix.push({ kind: 'if',
+          condition: call('JsOperators.StrictEquals', [read(p.binding), undef()], 'boolean'),
+          then: { kind: 'expression', expression: call('JsReference.Assign', [ref(p.binding), expression(p.initializer!)]) } });
+      }
+    }
+    return { name: `F${fn.instanceId}`, params: [], argumentsParam: variable(fn.argumentsBinding),
+      body: [...prefix, ...fn.body.map(statement)] };
   });
   return { ir: { functions, body: program.body.map(statement) }, trace, structuralContracts: [...contracts].sort() };
 }
