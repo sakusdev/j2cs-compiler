@@ -105,3 +105,15 @@ tests/differential/       Node vs generated C# executable comparisons
 Read the [architecture](docs/architecture.md),
 [requirements format](docs/requirements.md), and
 [rule DB integration findings](docs/rule-db-findings.md).
+
+
+## Autonomous compiler workstreams
+
+Compiler expansion is queued as GitHub Issues containing `WORKSTREAM:` and
+`STATUS: READY`. Workers follow `prompts/worker.md` and atomically claim an
+Issue using `work/issue-<ISSUE_NUMBER>`.
+
+Unlike the semantic rule database, compiler workstreams should not be fanned out
+without regard to dependencies: parser, analysis, lowering, emitter and runtime
+changes frequently touch shared compiler infrastructure. Prefer a small wave of
+independent capabilities, merge/rebase, then launch the next dependent wave.
