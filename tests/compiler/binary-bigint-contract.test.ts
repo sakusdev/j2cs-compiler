@@ -14,7 +14,7 @@ const index = await createCompiler();
 test('binary/BigInt runtime contract is connected to canonical pinned j2cs rules', () => {
   assert.equal(BINARY_BIGINT_RULE_DB_COMMIT, '35ca8d859f9352e90ee2497f4ac8f6edb9c19ed1');
   assert.deepEqual(validateBinaryBigIntRuleContract(index.database), []);
-  assert.equal(BINARY_BIGINT_RULES.length, 14);
+  assert.equal(BINARY_BIGINT_RULES.length, 16);
   for (const contract of BINARY_BIGINT_RULES) {
     const loaded = index.database.byId.get(contract.id);
     assert.ok(loaded, `missing ${contract.id}`);
@@ -36,6 +36,12 @@ test('binary/BigInt proof facts are three-valued and fail closed', () => {
     'ast.kind': 'NumericLiteral',
     'literal.parsedExactly': true,
   }), 'disproven');
+
+  assert.equal(proveBinaryBigIntRule('coercion.bigint-function.primitive', {
+    'binding.intrinsic': '%BigInt%',
+    'builtin.pristine': true,
+    'argument.domain': 'primitive',
+  }), 'proven');
 
   assert.equal(proveBinaryBigIntRule('binary.typedarray.indexed-write-bigint', {
     'receiver.content': 'BigInt',
