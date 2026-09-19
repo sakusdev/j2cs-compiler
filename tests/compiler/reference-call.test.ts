@@ -15,9 +15,8 @@ import { proveReferenceRule } from '../../compiler/rules/reference-call-proof.js
 function parsedCall(source: string) {
   const program = parse(source);
   const statement = program.body.at(-1);
-  assert.equal(statement?.kind, 'expression');
-  assert.equal(statement.kind === 'expression' && statement.expression.kind, 'call');
-  if (statement.kind !== 'expression' || statement.expression.kind !== 'call') throw new Error('expected call');
+  if (!statement || statement.kind !== 'expression' || statement.expression.kind !== 'call')
+    throw new Error('expected call');
   return statement.expression;
 }
 
