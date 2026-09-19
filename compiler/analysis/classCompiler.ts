@@ -59,12 +59,16 @@ export function compileClassProgram(program: ParsedClassProgram, index: RuleInde
         if (!method) fail('E_CLASS_STATIC_METHOD', 'Static method lowering metadata is missing.', expr.span);
         return `${method}()`;
       }
-      case 'consoleLog':
-        if (expr.args.length > 1 && expr.args[0]?.kind !== 'literal')
-          fail('E_CONSOLE_FORMAT', 'Multi-argument class-lane console.log requires a literal first argument to exclude Node format substitution.', expr.span);
-        if (expr.args.length > 1 && typeof expr.args[0]!.value === 'string' && expr.args[0]!.value.includes('%'))
-          fail('E_CONSOLE_FORMAT', 'Node console format substitution is outside the class-lane host contract.', expr.span);
+      case 'consoleLog': {
+        if (expr.args.length > 1) {
+          const first = expr.args[0]!;
+          if (first.kind !== 'literal')
+            fail('E_CONSOLE_FORMAT', 'Multi-argument class-lane console.log requires a literal first argument to exclude Node format substitution.', expr.span);
+          if (typeof first.value === 'string' && first.value.includes('%'))
+            fail('E_CONSOLE_FORMAT', 'Node console format substitution is outside the class-lane host contract.', expr.span);
+        }
         return `JsConsole.Log(${expr.args.map(emitExpr).join(', ')})`;
+      }
     }
   }
 
