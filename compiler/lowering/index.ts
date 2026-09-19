@@ -161,13 +161,13 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           const op = select({ kind: e.target }, facts, e.span);
           if (op !== e.target) fail('E_LOWERING', `Builtin adapter ${e.target} has no matching implementation.`, e.span);
           const receiver = expression(e.receiver), args = e.args.map(expression);
-          const runtime = {
+          const runtime = ({
             'array.at': 'JsArray.At', 'array.includes': 'JsArray.Includes',
             'array.indexOf': 'JsArray.IndexOf', 'array.pop': 'JsArray.Pop',
             'string.at': 'JsString.At', 'string.charAt': 'JsString.CharAt',
             'string.includes': 'JsString.Includes', 'string.indexOf': 'JsString.IndexOf',
             'string.slice': 'JsString.Slice', 'string.substring': 'JsString.Substring',
-          }[e.target];
+          } as Readonly<Record<string, string>>)[e.target];
           if (!runtime) return fail('E_LOWERING', `Unknown builtin lowering ${e.target}.`, e.span);
           if (e.target === 'array.pop') return call(runtime, [receiver]);
           if (e.target === 'array.at' || e.target === 'string.at' || e.target === 'string.charAt')
