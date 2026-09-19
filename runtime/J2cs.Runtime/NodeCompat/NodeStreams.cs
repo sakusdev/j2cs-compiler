@@ -340,6 +340,16 @@ public sealed class NodeDuplex
     public bool AllowHalfOpen { get; }
     public int ReadableHighWaterMark => Readable.HighWaterMark;
     public int WritableHighWaterMark => Writable.HighWaterMark;
+
+    public bool Push(NodeStreamChunk chunk) => Readable.Push(chunk);
+    public bool PushEof() => Readable.PushEof();
+    public NodeStreamChunk? Read(int? size = null) => Readable.Read(size);
+    public bool Write(NodeStreamChunk chunk, Action<Exception?>? callback = null) => Writable.Write(chunk, callback);
+    public NodeDuplex End(NodeStreamChunk? finalChunk = null, Action<Exception?>? callback = null)
+    {
+        Writable.End(finalChunk, callback);
+        return this;
+    }
 }
 
 public static class NodeStreams
