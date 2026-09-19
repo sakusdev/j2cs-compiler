@@ -213,13 +213,21 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     return useful.length ? union(...useful) : ['Undefined'];
   }
 
+  function specializationValueKey(value: ValueInfo | undefined): string {
+    if (!value) return '?';
+    return `${value.types.join('|')}#r:${(value.refs ?? []).join('|')}#f:${(value.functionIds ?? []).join('|')}`;
+  }
+  function captureSignature(fn: NonNullable<Binding['function']>): string {
+    const captures = bindings.captures.get(fn.id + 1) ?? [];
+    return captures.map(binding => `${binding.id}=${specializationValueKey(summaries.get(binding.id))}`).join(',');
+  }
   function instantiate(b: Binding, args: SE[], callNode: Node): SemanticFunction {
     const fn = b.function!;
     if (args.some(a => a.types.some(t => t === 'Object' || t === 'Array')))
       fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object/Array arguments require alias/effect summaries and are deferred.', callNode.span);
     const params = fn.params.map(p => bindings.declarations.get(p.id)!);
     const formal = params.map((_, i) => args[i] ?? syntheticUndefined(callNode));
-    const key = `${b.id}:${formal.map(a => `${a.types.join('|')}#${(a.functionIds??[]).join('|')}`).join(',')}`;
+    const key = `${b.id}:args=${formal.map(valueOf).map(specializationValueKey).join(',')}:captures=${captureSignature(fn)}`;
     const found = cache.get(key); if (found) return found;
     const seedEnv = new Map(params.map((p, i) => [p.id, valueOf(formal[i]!)]));
     const instance: SemanticFunction = {
