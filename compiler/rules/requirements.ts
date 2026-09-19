@@ -86,6 +86,8 @@ const knownFlags: Record<string, Predicate> = {
   callee_not_overridden: eq('binding.mutable', false),
   ordinary_function: eq('function.kind', 'ordinary'),
   no_eval_or_with: eq('analysis.dynamicScope', false),
+  binding_is_lexical_or_var: eq('binding.lexical', true),
+  per_iteration_binding_not_required: eq('binding.perIteration', false),
   scope_binding_conflicts_resolved: eq('analysis.bindings', 'resolved'),
   block_level_annex_b_not_applicable: eq('function.scope', 'module'),
   function_identity_unobserved: absentObservation('identity'),
