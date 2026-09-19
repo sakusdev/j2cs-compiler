@@ -99,7 +99,29 @@
         "kind": "binary",
         "operator": "+"
       },
-      "lowering": "helper.add"
+      "lowering": "helper.add",
+      "requires": [
+        {
+          "fact": "left.types",
+          "subsetOf": [
+            "Boolean",
+            "Null",
+            "Number",
+            "String",
+            "Undefined"
+          ]
+        },
+        {
+          "fact": "right.types",
+          "subsetOf": [
+            "Boolean",
+            "Null",
+            "Number",
+            "String",
+            "Undefined"
+          ]
+        }
+      ]
     },
     {
       "ruleId": "operators.strict-equality.number",
@@ -255,6 +277,30 @@
         "kind": "condition"
       },
       "lowering": "helper.truthiness"
+    },
+    {
+      "ruleId": "array.length.read",
+      "sha256": "150784be34750dfb1e1168362dcb67a62a54442a59da6c90b863f19d0d0c5174",
+      "selector": {
+        "kind": "array.length"
+      },
+      "lowering": "array.length"
+    },
+    {
+      "ruleId": "array.prototype.push",
+      "sha256": "01c148e7df34e05d4b6fd59dce69a0f4c76b4333f381778a9ae74e487bfb025d",
+      "selector": {
+        "kind": "array.push"
+      },
+      "lowering": "array.push"
+    },
+    {
+      "ruleId": "object.has-own",
+      "sha256": "7cae6204802e5d9cbe96bb2835a91b60a37910720a247b94b25afd21d10162db",
+      "selector": {
+        "kind": "object.hasOwn"
+      },
+      "lowering": "object.hasOwn"
     }
   ]
 }
