@@ -1,11 +1,14 @@
 import type { Binding } from '../analysis/bindings.js';
 import type { TypeSet } from '../analysis/facts.js';
 import type { Node, LiteralValue } from '../parser/ast.js';
+
 export type RefSet = readonly number[];
-interface Typed { types: TypeSet; refs?: RefSet }
+interface Typed { types: TypeSet; refs?: RefSet; functionIds?: readonly number[] }
+
 export type SemanticExpr = Node & Typed & (
   | { kind: 'literal'; value: LiteralValue | undefined }
   | { kind: 'read'; binding: Binding }
+  | { kind: 'functionValue'; binding: Binding }
   | { kind: 'binary'; op: string; left: SemanticExpr; right: SemanticExpr }
   | { kind: 'unary'; op: string; operand: SemanticExpr }
   | { kind: 'assign'; binding: Binding; value: SemanticExpr }
@@ -15,14 +18,18 @@ export type SemanticExpr = Node & Typed & (
   | { kind: 'member'; object: SemanticExpr; property: string }
   | { kind: 'object'; properties: { key: string; value: SemanticExpr }[] }
   | { kind: 'array'; elements: (SemanticExpr | null)[] }
-  | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt' | number; args: SemanticExpr[]; binding: Binding; arity: number }
+  | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt'; args: SemanticExpr[]; binding: Binding; arity: number }
+  | { kind: 'call'; target: number; callee: SemanticExpr; args: SemanticExpr[]; binding: Binding;
+      arity: number; callMode: 'exact' | 'missing' | 'extra' }
   | { kind: 'call'; target: 'array.push'; receiver: SemanticExpr; args: SemanticExpr[]; arity: number }
   | { kind: 'call'; target: 'object.hasOwn'; receiver: SemanticExpr; property: string; binding: Binding; args: []; arity: 2 }
 );
+
 export type SemanticForInitializer = Node & (
   | { kind: 'variables'; declarations: (SemanticStatement & { kind: 'variable' })[] }
   | { kind: 'expression'; expression: SemanticExpr }
 );
+
 export type SemanticStatement = Node & (
   | { kind: 'variable'; binding: Binding; initializer: SemanticExpr }
   | { kind: 'expression'; expression: SemanticExpr }
@@ -35,7 +42,19 @@ export type SemanticStatement = Node & (
   | { kind: 'continue' }
   | { kind: 'return'; value: SemanticExpr }
 );
+
 export interface SemanticFunction extends Node {
-  instanceId: number; binding: Binding; params: Binding[]; body: SemanticStatement[]; returnTypes: TypeSet;
+  instanceId: number;
+  binding: Binding;
+  params: Binding[];
+  body: SemanticStatement[];
+  returnTypes: TypeSet;
+  returnFunctionIds: readonly number[];
 }
-export interface SemanticProgram { body: SemanticStatement[]; functions: SemanticFunction[] }
+
+export interface SemanticProgram {
+  body: SemanticStatement[];
+  functions: SemanticFunction[];
+  templates: Binding[];
+  captures: ReadonlyMap<number, readonly Binding[]>;
+}
