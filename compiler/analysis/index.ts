@@ -391,6 +391,11 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   }
 
   function statements(nodes: Statement[], f: Flow, loop?: LoopControl): SS[] {
+    for (const n of nodes) {
+      if (n.kind !== 'function') continue;
+      const binding = bindings.declarations.get(n.id)!;
+      const value = functionValue(binding); f.env.set(binding.id, value); record(binding, value);
+    }
     const result: SS[] = [];
     for (const n of nodes) {
       if (!f.reachable) break;
@@ -404,14 +409,13 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       case 'variable': {
         const binding = bindings.declarations.get(n.id)!;
         const initializer = n.initializer ? expression(n.initializer, f) : syntheticUndefined(n);
-        f.env.set(binding.id, valueOf(initializer)); return { ...n, binding, initializer };
+        f.env.set(binding.id, valueOf(initializer)); record(binding, valueOf(initializer)); return { ...n, binding, initializer };
       }
       case 'expression': return { ...n, expression: expression(n.expression, f) };
       case 'block': return { ...n, body: statements(n.body, f, loop) };
       case 'return': {
         const value = n.value ? expression(n.value, f) : syntheticUndefined(n);
-        if (hasReference(value.types)) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Returning Object/Array values from specialized functions is deferred.', n.span);
-        f.returns.push(value.types); f.reachable = false; return { ...n, value };
+        f.returns.push(valueOf(value)); f.reachable = false; return { ...n, value };
       }
       case 'break': {
         if (!loop) return fail('E_BREAK_CONTEXT', 'break outside a loop is unsupported.', n.span);
@@ -423,8 +427,8 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
       case 'if': {
         const condition = expression(n.condition, f);
-        const a: Flow = { env: cloneEnv(f.env), heap: cloneHeap(f.heap), reachable: true, returns: [], loopDepth: f.loopDepth };
-        const b: Flow = { env: cloneEnv(f.env), heap: cloneHeap(f.heap), reachable: true, returns: [], loopDepth: f.loopDepth };
+        const a: Flow = { env: cloneEnv(f.env), heap: cloneHeap(f.heap), reachable: true, returns: [], loopDepth: f.loopDepth, owner: f.owner };
+        const b: Flow = { env: cloneEnv(f.env), heap: cloneHeap(f.heap), reachable: true, returns: [], loopDepth: f.loopDepth, owner: f.owner };
         const then = statement(n.then, a, loop) ?? emptyStatement(n.then);
         const otherwise = n.otherwise && (statement(n.otherwise, b, loop) ?? emptyStatement(n.otherwise));
         const live = [a, b].filter(x => x.reachable);
@@ -439,7 +443,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         const entry = stateOf(f);
         let head = stateOf(f);
         const run = (state: State) => {
-          const iter: Flow = { env: cloneEnv(state.env), heap: cloneHeap(state.heap), reachable: true, returns: [], loopDepth: f.loopDepth + 1 };
+          const iter: Flow = { env: cloneEnv(state.env), heap: cloneHeap(state.heap), reachable: true, returns: [], loopDepth: f.loopDepth + 1, owner: f.owner };
           const condition = expression(n.condition, iter), conditionExit = stateOf(iter);
           const control: LoopControl = { breaks: [], continues: [] };
           const body = statement(n.body, iter, control) ?? emptyStatement(n.body);
@@ -460,17 +464,17 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       case 'doWhile': {
         const entry=stateOf(f); let head=stateOf(f);
         const run=(state:State)=>{
-          const iter:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+          const iter:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
           const control:LoopControl={breaks:[],continues:[]};
           const body=statement(n.body,iter,control)??emptyStatement(n.body);
           const backs=[...(iter.reachable?[stateOf(iter)]:[]),...control.continues];
           let condition:SE, conditionExit:State|undefined, back:State|undefined;
           if(backs.length){
             const testState=joinStates(state,backs);
-            const test:Flow={env:cloneEnv(testState.env),heap:cloneHeap(testState.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+            const test:Flow={env:cloneEnv(testState.env),heap:cloneHeap(testState.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
             condition=expression(n.condition,test); conditionExit=stateOf(test); back=stateOf(test);
           } else {
-            const unreachable:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+            const unreachable:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
             condition=expression(n.condition,unreachable);
           }
           return {condition,body,conditionExit,back,breaks:control.breaks,returns:iter.returns};
@@ -495,7 +499,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         }
         const entry=stateOf(f);let head=stateOf(f);
         const run=(state:State)=>{
-          const iter:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+          const iter:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
           let condition:SE|undefined,conditionExit:State|undefined;
           if(n.condition){condition=expression(n.condition,iter);conditionExit=stateOf(iter)}
           const control:LoopControl={breaks:[],continues:[]};
@@ -504,11 +508,11 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
           let update:SE|undefined,back:State|undefined;
           if(backs.length){
             const updateState=joinStates(state,backs);
-            const updateFlow:Flow={env:cloneEnv(updateState.env),heap:cloneHeap(updateState.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+            const updateFlow:Flow={env:cloneEnv(updateState.env),heap:cloneHeap(updateState.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
             if(n.update)update=expression(n.update,updateFlow);
             back=stateOf(updateFlow);
           }else if(n.update){
-            const unreachable:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+            const unreachable:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
             update=expression(n.update,unreachable);
           }
           return {condition,conditionExit,body,update,back,breaks:control.breaks,returns:iter.returns};
@@ -526,5 +530,6 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     }
   }
 
-  return { body: statements(program.body, { env: new Map(), heap: new Map(), reachable: true, returns: [], loopDepth: 0 }), functions: instances };
+  return { body: statements(program.body, { env: new Map(), heap: new Map(), reachable: true, returns: [], loopDepth: 0, owner: 0 }),
+    functions: instances, templates: bindings.functions, captures: bindings.captures };
 }
