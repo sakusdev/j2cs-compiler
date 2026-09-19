@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { ROOT } from '../../compiler/index.js';
+import { ROOT, compile, createCompiler } from '../../compiler/index.js';
 import { promiseFacts } from '../../compiler/analysis/async.js';
 import { loadRules, type RuleDatabase } from '../../compiler/rules/loader.js';
 import { PROMISE_CORE_CONTRACTS, provePromiseCoreRule, validatePromiseCoreContracts } from '../../compiler/rules/promise.js';
@@ -56,4 +56,13 @@ test('Promise adapter rejects a changed upstream rule fingerprint', () => {
   };
   changed.byId.set(original.rule.id, { ...original, sha256: 'changed' });
   assert.throws(() => validatePromiseCoreContracts(changed), /changed/);
+});
+
+
+test('Promise syntax entry remains explicitly fail-closed until merge-safe parser/lowering wiring exists', async () => {
+  const index = await createCompiler();
+  assert.throws(() => compile('Promise.resolve(1);', index, 'promise-entry.js'),
+    /Unsupported|Unresolved|E_UNSUPPORTED|E_UNBOUND|safe rule/i);
+  assert.throws(() => compile('new Promise(() => {});', index, 'promise-constructor-entry.js'),
+    /Unsupported|E_UNSUPPORTED/i);
 });
