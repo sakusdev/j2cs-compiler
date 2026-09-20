@@ -140,7 +140,7 @@ public sealed class JsMap : JsObject
     private static JsValue CanonicalizeKey(JsValue key)
         => key.Kind == JsKind.Number && key.Number == 0d ? JsValue.FromNumber(0d) : key;
 
-    public static JsValue Create() => JsValue.FromReference(new JsMap());
+    public new static JsValue Create() => JsValue.FromReference(new JsMap());
 
     public static JsValue Set(JsValue receiver, JsValue key, JsValue value)
     {
