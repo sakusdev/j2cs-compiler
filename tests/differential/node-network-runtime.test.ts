@@ -156,6 +156,7 @@ test('Node vs C# network compatibility foundation', { timeout: 90_000 }, async (
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="runtime/**/*.cs" />
     <ProjectReference Include="runtime/J2cs.Runtime/J2cs.Runtime.csproj" />
   </ItemGroup>
 </Project>
