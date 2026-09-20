@@ -220,24 +220,47 @@ public sealed class BrowserWindow
 
     private void SetFocused(bool value)
     {
-        if (focused == value)
+        BrowserWindow? previouslyFocused = null;
+        var emitFocused = false;
+        var emitBlurred = false;
+
+        lock (RegistryGate)
         {
             if (value)
             {
-                lock (RegistryGate) focusedWindow = this;
+                if (ReferenceEquals(focusedWindow, this) && focused) return;
+
+                if (focusedWindow is { destroyed: false } current && !ReferenceEquals(current, this))
+                {
+                    if (current.focused)
+                    {
+                        current.focused = false;
+                        previouslyFocused = current;
+                    }
+                }
+
+                emitFocused = !focused;
+                focused = true;
+                focusedWindow = this;
             }
-            return;
+            else
+            {
+                if (!focused)
+                {
+                    if (ReferenceEquals(focusedWindow, this)) focusedWindow = null;
+                    return;
+                }
+
+                focused = false;
+                if (ReferenceEquals(focusedWindow, this)) focusedWindow = null;
+                emitBlurred = true;
+            }
         }
 
-        focused = value;
-        lock (RegistryGate)
-        {
-            if (value) focusedWindow = this;
-            else if (ReferenceEquals(focusedWindow, this)) focusedWindow = null;
-        }
-
-        if (value) Focused?.Invoke(this, EventArgs.Empty);
-        else Blurred?.Invoke(this, EventArgs.Empty);
+        if (previouslyFocused is not null)
+            previouslyFocused.Blurred?.Invoke(previouslyFocused, EventArgs.Empty);
+        if (emitFocused) Focused?.Invoke(this, EventArgs.Empty);
+        else if (emitBlurred) Blurred?.Invoke(this, EventArgs.Empty);
     }
 
     private static void ValidateSize(int width, int height)
