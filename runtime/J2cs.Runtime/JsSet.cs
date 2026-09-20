@@ -56,7 +56,7 @@ public sealed class JsSet : JsObject
     private static JsValue CanonicalizeValue(JsValue value)
         => value.Kind == JsKind.Number && value.Number == 0d ? JsValue.FromNumber(0d) : value;
 
-    public static JsValue Create() => JsValue.FromReference(new JsSet());
+    public new static JsValue Create() => JsValue.FromReference(new JsSet());
 
     public static JsValue Add(JsValue receiver, JsValue value)
     {
