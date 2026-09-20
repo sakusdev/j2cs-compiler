@@ -222,7 +222,7 @@ public sealed class IpcMain
         }
         catch (Exception exception)
         {
-            throw new IpcRemoteException(exception.GetType().Name, exception.Message);
+            throw new IpcRemoteException("Error", exception.Message);
         }
     }
 }
