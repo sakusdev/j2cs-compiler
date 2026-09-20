@@ -13,6 +13,7 @@ public class JsObject
 
     protected virtual bool TryGetOwn(string key, out JsValue value) => ownData.TryGetValue(key, out value);
     protected virtual void SetOwn(string key, JsValue value) => ownData[key] = value;
+    protected virtual bool DeleteOwn(string key) => ownData.Remove(key);
     public virtual bool HasOwnProperty(string key) => ownData.ContainsKey(key);
 
     internal static JsObject RequireReference(JsValue value)
@@ -49,7 +50,7 @@ public class JsObject
 /// Canonical sparse Array representation. Length is independent from materialized
 /// indexed elements, so a hole and an own element whose value is undefined remain distinct.
 /// </summary>
-public sealed class JsArray : JsObject
+public sealed partial class JsArray : JsObject
 {
     private uint length;
     private JsArray(uint length) => this.length = length;

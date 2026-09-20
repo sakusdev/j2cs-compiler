@@ -32,6 +32,14 @@ test('array/object core requirements are proven only from explicit representatio
   assert.equal(evaluateRequirements({ object_representation_supports_own_property_test: true }, array).verdict, 'proven');
   assert.equal(evaluateRequirements({ receiver_inferred_as_builtin_array: true }, facts).verdict, 'unknown');
 });
+test('canonical String receiver vocabulary is proven only for primitive String flow facts', () => {
+  const string = new Facts(facts).type('receiver', ['String'], 'flow receiver');
+  assert.equal(evaluateRequirements({ receiver_inferred_as: 'builtin String primitive' }, string).verdict, 'proven');
+  assert.equal(evaluateRequirements({ receiver_inferred_as: 'primitive string' }, string).verdict, 'proven');
+  const number = new Facts(facts).type('receiver', ['Number'], 'flow receiver');
+  assert.equal(evaluateRequirements({ receiver_inferred_as: 'builtin String primitive' }, number).verdict, 'disproven');
+  assert.equal(evaluateRequirements({ receiver_inferred_as: 'unknown string profile' }, string).verdict, 'unknown');
+});
 test('structured versioned predicates preserve three-valued logic', () => {
   const r = evaluateRequirements({ $j2cs: { version: 1, predicate: { all: [
     { fact: 'left.type', equals: 'Number' }, { not: { fact: 'profile.platform', equals: 'win32' } },

@@ -36,6 +36,25 @@ test('object/array core selects canonical safe rules and preserves identity in e
   assert.match(r.source, /JsObject\.Create\(\)/); assert.match(r.source, /JsArray\.Create\(3d\)/);
   assert.ok(!/\bdynamic\b|\bobject\b/.test(r.source));
 });
+test('reviewed Array and String builtins select pinned canonical rules', () => {
+  const r = compile(`
+    const o={}; const refs=[o];
+    const a=[NaN,,undefined,3];
+    console.log(a.at(-1),a.at(1)===undefined,a.includes(NaN),a.includes(undefined),a.indexOf(undefined));
+    console.log(refs.includes(o),refs.indexOf(o)); a.pop();
+    const s='A\\ud83d\\ude00B';
+    console.log(s.length,s.at(1)==='\\ud83d',s.charAt(2)==='\\ude00',s.includes('\\ud83d'),
+      s.indexOf('B'),s.slice(1,-1)==='\\ud83d\\ude00',s.substring(3,1)==='\\ud83d\\ude00');
+  `, index);
+  const ids = new Set(r.trace.map(t => t.ruleId));
+  for (const id of ['array.prototype.at', 'array.prototype.includes', 'array.prototype.indexof', 'array.prototype.pop',
+    'string.length', 'string.prototype.at', 'string.prototype.charat', 'string.prototype.includes',
+    'string.prototype.indexof', 'string.prototype.slice', 'string.prototype.substring'])
+    assert.ok(ids.has(id), `missing canonical rule ${id}`);
+  assert.ok(r.trace.filter(t => ids.has(t.ruleId)).every(t => t.requirements.verdict === 'proven'));
+  assert.match(r.source, /JsArray\.At\(/); assert.match(r.source, /JsArray\.Includes\(/);
+  assert.match(r.source, /JsString\.Length\(/); assert.match(r.source, /JsString\.Slice\(/);
+});
 test('parser normalizes classic loops and mutation operators', () => {
   const ast = parse('for (let i=0; i<2; i++) { while (false) { break; } }');
   assert.equal(ast.body[0]?.kind, 'for');
@@ -86,6 +105,11 @@ const diagnostics: [string, string, string][] = [
   ['prototype mutation', 'const x={}; x.__proto__={};', 'E_PROTOTYPE_MUTATION'],
   ['array length write', 'const x=[]; x.length=4;', 'E_ARRAY_LENGTH_WRITE'],
   ['array method override', 'const x=[]; x.push=1; x.push(2);', 'E_ARRAY_METHOD_OVERRIDDEN'],
+  ['array builtin override', 'const x=[1]; x.at=1; x.at(0);', 'E_ARRAY_METHOD_OVERRIDDEN'],
+  ['array builtin object index coercion', 'const x=[1]; x.at({});', 'E_BUILTIN_COERCION'],
+  ['string builtin object coercion', "const x='abc'; x.includes({});", 'E_BUILTIN_COERCION'],
+  ['array builtin arity', 'const x=[1]; x.at();', 'E_ARITY'],
+  ['unreviewed array builtin', 'const x=[1]; x.reverse();', 'E_INDIRECT_CALL'],
   ['object coercing addition', "const x={}; console.log('x'+x);", 'E_NO_SAFE_RULE'],
   ['console object inspection', 'console.log({a:1});', 'E_CONSOLE_OBJECT'],
   ['object function boundary', 'function f(){ return {}; } f();', 'E_OBJECT_FUNCTION_BOUNDARY'],

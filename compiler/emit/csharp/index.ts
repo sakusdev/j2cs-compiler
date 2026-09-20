@@ -26,7 +26,10 @@ const calls = new Set(['JsValue.IsTruthy', 'JsOperators.Add', 'JsOperators.Stric
   'JsReference.DivideAssignNumber', 'JsReference.RemainderAssignNumber', 'JsReference.PrefixIncrementNumber',
   'JsReference.PostfixIncrementNumber', 'JsReference.PrefixDecrementNumber', 'JsReference.PostfixDecrementNumber',
   'JsConsole.Log', 'string.Concat', 'JsObject.Create', 'JsObject.DefineDataProperty', 'JsObject.GetProperty',
-  'JsObject.SetProperty', 'JsObject.HasOwn', 'JsArray.Create', 'JsArray.DefineElement', 'JsArray.Length', 'JsArray.Push']);
+  'JsObject.SetProperty', 'JsObject.HasOwn', 'JsArray.Create', 'JsArray.DefineElement', 'JsArray.Length', 'JsArray.Push',
+  'JsArray.At', 'JsArray.Includes', 'JsArray.IndexOf', 'JsArray.Pop',
+  'JsString.Length', 'JsString.At', 'JsString.CharAt', 'JsString.Includes', 'JsString.IndexOf',
+  'JsString.Slice', 'JsString.Substring']);
 function expr(e: CsExpr): string {
   switch (e.kind) {
     case 'literal': return e.repr === 'number' ? number(e.value) : e.repr === 'string' ? quote(e.value) : String(e.value);

@@ -107,6 +107,8 @@ const names: Record<string, string> = {
 };
 /** Translate only reviewed legacy vocabulary. Prose and unknown keys fail closed. */
 export function legacyPredicate(key: string, value: unknown): Predicate {
+  if (key === 'receiver_inferred_as' && (value === 'builtin String primitive' || value === 'primitive string'))
+    return typeIs('receiver', 'String');
   if (names[key] && ['string', 'number', 'boolean'].includes(typeof value))
     return eq(names[key]!, value as string | number | boolean);
   const excludes: Record<string, string> = {
