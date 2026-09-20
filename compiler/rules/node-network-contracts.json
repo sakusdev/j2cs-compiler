@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "ruleDbCommit": "35ca8d859f9352e90ee2497f4ac8f6edb9c19ed1",
+  "contracts": [
+    {
+      "ruleId": "node.http.incoming-message.headers",
+      "sha256": "aaef97053cfcb866d0e7a36c2b867ab2e1b38238e2b2e4212a7ac351f0a86f1c",
+      "module": "node:http",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeHttpIncomingHeaders",
+      "availability": "executable-helper",
+      "receiver": "node:http IncomingMessage"
+    },
+    {
+      "ruleId": "node.http.incoming-message.headers-distinct",
+      "sha256": "5d9b6b221a684c822a8db7b84dafede8dced137a8baa8591e66655d3c817db8e",
+      "module": "node:http",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeHttpIncomingHeaders",
+      "availability": "executable-helper",
+      "receiver": "node:http IncomingMessage"
+    },
+    {
+      "ruleId": "node.http.client-request.set-header",
+      "sha256": "d44f1d51608f7a442fa3d86c6a694ac080e971f3934aa34f5392e7b2d5c0cfe0",
+      "module": "node:http",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeHttpOutgoingHeaders",
+      "availability": "executable-helper",
+      "receiver": "node:http ClientRequest"
+    },
+    {
+      "ruleId": "node.dns.lookup",
+      "sha256": "b864f7ff7d585ad61be76b2fcce8d56a38309ff9cf09cb1d2bab4c06fa7d5273",
+      "module": "node:dns",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeDns",
+      "availability": "transport-foundation"
+    },
+    {
+      "ruleId": "node.dns.lookup-all",
+      "sha256": "fd97e0fcee8857a22b8b6805afbb48ff3c60ebd2645e5a1b67d2a8aad0d70dea",
+      "module": "node:dns",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeDns",
+      "availability": "transport-foundation"
+    },
+    {
+      "ruleId": "node.net.create-server",
+      "sha256": "5057db8edb9cb525568b9460af190a79efcbe913f86db229380bee6e8b3b83da",
+      "module": "node:net",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeTcpServer",
+      "availability": "transport-foundation"
+    },
+    {
+      "ruleId": "node.net.server.listen",
+      "sha256": "20321cd63eec4756a94305d7337223778341912663acb9998af1c4ae3bbfe5a3",
+      "module": "node:net",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeTcpServer",
+      "availability": "transport-foundation"
+    },
+    {
+      "ruleId": "node.net.socket.connect",
+      "sha256": "8b453331bd6311cd34530f7a38486c91904d4685d76e67664eed4e0facab4221",
+      "module": "node:net",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeTcpSocket",
+      "availability": "transport-foundation"
+    },
+    {
+      "ruleId": "node.tls.connect",
+      "sha256": "1521f8c88e0dda814379bcb8b146923f5d66c08d7949dfcd22c4ac1046ab68ad",
+      "module": "node:tls",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeTlsClient",
+      "availability": "transport-foundation",
+      "blockedBy": [
+        "NODE_EVENTS_STREAMS_BUFFER"
+      ]
+    },
+    {
+      "ruleId": "node.net.socket.write",
+      "sha256": "0c74f3507bbbadeaddfc11052fe2d0d0b32f1721cc3daff9d5ab85df79e13ec8",
+      "module": "node:net",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeTcpSocket",
+      "availability": "deferred",
+      "blockedBy": [
+        "NODE_EVENTS_STREAMS_BUFFER"
+      ]
+    },
+    {
+      "ruleId": "node.http.request",
+      "sha256": "79c53b7a3311a964587cf76812c1dcbf2bd43bbd65435b66b5b77185f6f41356",
+      "module": "node:http",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeHttpTransport",
+      "availability": "deferred",
+      "blockedBy": [
+        "NODE_EVENTS_STREAMS_BUFFER",
+        "NODE_MODULES_COMMONJS_ESM"
+      ]
+    },
+    {
+      "ruleId": "node.http.create-server",
+      "sha256": "291cb13eb1b386a7d06fd3eee3895b004f5cf87ee15da09d5f749d6751f9233b",
+      "module": "node:http",
+      "runtime": "J2cs.Runtime.NodeCompat.NodeHttpTransport",
+      "availability": "deferred",
+      "blockedBy": [
+        "NODE_EVENTS_STREAMS_BUFFER",
+        "NODE_MODULES_COMMONJS_ESM"
+      ]
+    }
+  ]
+}
