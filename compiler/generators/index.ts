@@ -407,6 +407,7 @@ function compileGeneratorProgram(program: GProgram, index: RuleIndex): Generator
     let terminated = false;
     let delegateIndex = 0;
     const delegateFields: Array<{ value: string; active: string; first: string }> = [];
+    const arrayDelegateFields: string[] = [];
 
     const freshCase = (): CaseBlock => {
       const c = { id: nextState++, lines: [] };
@@ -516,11 +517,18 @@ function compileGeneratorProgram(program: GProgram, index: RuleIndex): Generator
           y.span,
         );
         contracts.add('generator.yield-star.array-return-missing-v1');
-        for (const element of y.value.elements) {
+        contracts.add('generator.yield-star.array-eager-elements-v1');
+        const elementFields = y.value.elements.map(element => {
           const yielded = element ? valueExpression(element, { env, machine: true }) : literal(undefined);
+          const field = '__arrayDelegate' + arrayDelegateFields.length;
+          arrayDelegateFields.push(field);
+          current.lines.push(field + ' = ' + yielded.code + ';');
+          return field;
+        });
+        for (const field of elementFields) {
           const resumeCase = nextState;
           current.lines.push('state = ' + resumeCase + ';');
-          current.lines.push('return JsGeneratorStep.Yield(' + yielded.code + ');');
+          current.lines.push('return JsGeneratorStep.Yield(' + field + ');');
           freshCase();
         }
         finishYieldStarValue(target, 'JsUndefined.Value');
@@ -596,6 +604,8 @@ function compileGeneratorProgram(program: GProgram, index: RuleIndex): Generator
       machine.push('        private bool ' + d.active + ';');
       machine.push('        private bool ' + d.first + ';');
     }
+    for (const field of arrayDelegateFields)
+      machine.push('        private JsValue ' + field + ' = JsUndefined.Value;');
     machine.push('');
     machine.push('        internal G' + def.id + 'Machine(' + paramSlots.map(s => 'JsValue p_' + s.cname).join(', ') + ')');
     machine.push('        {');
