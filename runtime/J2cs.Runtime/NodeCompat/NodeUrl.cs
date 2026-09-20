@@ -31,7 +31,7 @@ public static class NodeUrl
         string host = uri.Host;
         string rawPath = uri.AbsolutePath;
 
-        if (ContainsEncodedSeparator(rawPath, platformMode))
+        if (ContainsEncodedSeparator(value, platformMode))
             throw new NodeUrlException("ERR_INVALID_FILE_URL_PATH", "File URL path contains an encoded path separator.");
 
         string decodedPath = DecodeUtf8PercentEscapes(rawPath);
@@ -63,6 +63,7 @@ public static class NodeUrl
     {
         for (int i = 0; i + 2 < rawPath.Length; i++)
         {
+            if (rawPath[i] is '?' or '#') break;
             if (rawPath[i] != '%') continue;
             int value = Hex(rawPath[i + 1]) * 16 + Hex(rawPath[i + 2]);
             if (value < 0) continue;
