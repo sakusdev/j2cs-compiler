@@ -15,7 +15,7 @@ export function programFacts(): Facts {
 function bindingFacts(f: Facts, b: Binding): void {
   f.prove('binding.kind', b.kind, `Resolved binding #${b.id} (${b.name})`)
     .prove('binding.origin', b.kind === 'intrinsic' ? 'intrinsic' : 'declaration', 'Lexical binder provenance')
-    .prove('binding.mutable', ['let', 'parameter'].includes(b.kind), 'Binder rejects writes to other binding kinds');
+    .prove('binding.mutable', ['let', 'parameter', 'catch'].includes(b.kind), 'Binder rejects writes to other binding kinds');
   if (b.kind === 'intrinsic') f.prove('binding.globalProperty', b.name, 'Unshadowed intrinsic resolution')
     .prove('binding.intrinsic', `%${b.name}%`, 'Intrinsic binding identity');
 }
