@@ -7,7 +7,19 @@ public delegate void IpcRendererListener(IReadOnlyList<IpcValue> arguments);
 public sealed class IpcRendererDestroyedException : InvalidOperationException
 {
     public IpcRendererDestroyedException(int rendererId)
-        : base("Electron renderer " + rendererId + " has been destroyed.") { }
+        : base("Electron renderer " + rendererId + " has been destroyed.")
+        => RendererId = rendererId;
+
+    public int RendererId { get; }
+}
+
+public sealed class IpcNoHandlerException : InvalidOperationException
+{
+    public IpcNoHandlerException(string channel)
+        : base("No invoke handler is registered for channel '" + channel + "'.")
+        => Channel = channel;
+
+    public string Channel { get; }
 }
 
 public sealed class IpcRemoteException : Exception
@@ -26,16 +38,19 @@ public sealed class IpcRemoteException : Exception
 public sealed class IpcMainEvent
 {
     private readonly Action<string, IReadOnlyList<IpcValue>> reply;
-    private IpcValue? returnValue;
 
-    internal IpcMainEvent(int rendererId, Action<string, IReadOnlyList<IpcValue>> reply)
+    internal IpcMainEvent(
+        int rendererId,
+        IpcWebContents sender,
+        Action<string, IReadOnlyList<IpcValue>> reply)
     {
         RendererId = rendererId;
+        Sender = sender;
         this.reply = reply;
     }
 
     public int RendererId { get; }
-    public bool HasReturnValue => returnValue is not null;
+    public IpcWebContents Sender { get; }
 
     public void Reply(string channel, params IpcValue[] arguments)
     {
@@ -43,12 +58,6 @@ public sealed class IpcMainEvent
         ArgumentNullException.ThrowIfNull(arguments);
         reply(channel, arguments);
     }
-
-    public void SetReturnValue(IpcValue value)
-        => returnValue = IpcStructuredClone.Clone(value ?? throw new ArgumentNullException(nameof(value)));
-
-    internal IpcValue GetReturnValueOrUndefined()
-        => returnValue ?? IpcUndefinedValue.Instance;
 }
 
 internal sealed class IpcTaskQueue
@@ -127,7 +136,8 @@ public sealed class IpcMain
         lock (gate)
         {
             if (handlers.ContainsKey(channel))
-                throw new InvalidOperationException("An invoke handler is already registered for channel '" + channel + "'.");
+                throw new InvalidOperationException(
+                    "An invoke handler is already registered for channel '" + channel + "'.");
             handlers.Add(channel, new InvokeRegistration { Handler = handler, Once = once });
         }
     }
@@ -152,20 +162,6 @@ public sealed class IpcMain
             listener(@event, arguments);
     }
 
-    internal IpcValue DispatchSync(IpcRenderer renderer, string channel, IReadOnlyList<IpcValue> arguments)
-    {
-        IpcMainListener[] snapshot;
-        lock (gate)
-            snapshot = listeners.TryGetValue(channel, out var channelListeners)
-                ? channelListeners.ToArray()
-                : Array.Empty<IpcMainListener>();
-
-        var @event = renderer.CreateMainEvent();
-        foreach (var listener in snapshot)
-            listener(@event, arguments);
-        return IpcStructuredClone.Clone(@event.GetReturnValueOrUndefined());
-    }
-
     internal async ValueTask<IpcValue> DispatchInvokeAsync(
         IpcRenderer renderer,
         string channel,
@@ -175,13 +171,55 @@ public sealed class IpcMain
         lock (gate)
         {
             if (!handlers.TryGetValue(channel, out registration!))
-                throw new InvalidOperationException("No invoke handler is registered for channel '" + channel + "'.");
+                throw new IpcNoHandlerException(channel);
             if (registration.Once)
                 handlers.Remove(channel);
         }
 
-        return await registration.Handler(renderer.CreateMainEvent(), arguments).ConfigureAwait(false);
+        try
+        {
+            return await registration.Handler(renderer.CreateMainEvent(), arguments).ConfigureAwait(false);
+        }
+        catch (IpcNoHandlerException)
+        {
+            throw;
+        }
+        catch (IpcDataCloneException)
+        {
+            throw;
+        }
+        catch (IpcRendererDestroyedException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            throw new IpcRemoteException(exception.GetType().Name, exception.Message);
+        }
     }
+}
+
+public sealed class IpcWebContents
+{
+    private readonly ElectronIpcRuntime runtime;
+    private readonly IpcRenderer renderer;
+
+    internal IpcWebContents(ElectronIpcRuntime runtime, IpcRenderer renderer)
+    {
+        this.runtime = runtime;
+        this.renderer = renderer;
+    }
+
+    public int RendererId => renderer.Id;
+    public bool IsDestroyed => renderer.IsDestroyed;
+
+    public void Send(string channel, params IpcValue[] arguments)
+    {
+        renderer.EnsureAlive();
+        runtime.EnqueueMainToRenderer(renderer, channel, arguments);
+    }
+
+    public void Destroy() => renderer.Destroy();
 }
 
 public sealed class IpcRenderer
@@ -195,10 +233,12 @@ public sealed class IpcRenderer
     {
         this.runtime = runtime;
         Id = id;
+        WebContents = new IpcWebContents(runtime, this);
     }
 
     public int Id { get; }
     public bool IsDestroyed => Volatile.Read(ref destroyed) != 0;
+    public IpcWebContents WebContents { get; }
 
     public IpcRenderer On(string channel, IpcRendererListener listener)
     {
@@ -229,12 +269,6 @@ public sealed class IpcRenderer
         return runtime.EnqueueInvoke(this, channel, arguments);
     }
 
-    public IpcValue SendSync(string channel, params IpcValue[] arguments)
-    {
-        EnsureAlive();
-        return runtime.SendSync(this, channel, arguments);
-    }
-
     public void Destroy()
         => Interlocked.Exchange(ref destroyed, 1);
 
@@ -245,7 +279,11 @@ public sealed class IpcRenderer
     }
 
     internal IpcMainEvent CreateMainEvent()
-        => new(Id, (channel, arguments) => runtime.EnqueueMainToRenderer(this, channel, arguments));
+        => new(Id, WebContents, (channel, arguments) =>
+        {
+            EnsureAlive();
+            runtime.EnqueueMainToRenderer(this, channel, arguments);
+        });
 
     internal ValueTask DeliverAsync(string channel, IReadOnlyList<IpcValue> arguments)
     {
@@ -277,16 +315,21 @@ public sealed class ElectronIpcRuntime
     public IpcRenderer CreateRenderer()
         => new(this, Interlocked.Increment(ref nextRendererId));
 
+    /// <summary>
+    /// Runs accepted asynchronous IPC tasks in FIFO order. A native Electron host
+    /// calls this from its event-loop integration; tests use it as a deterministic
+    /// scheduling boundary.
+    /// </summary>
     public ValueTask DrainAsync()
         => queue.DrainAsync();
 
     internal void EnqueueSend(IpcRenderer renderer, string channel, IReadOnlyList<IpcValue> arguments)
     {
         ArgumentException.ThrowIfNullOrEmpty(channel);
+        renderer.EnsureAlive();
         var snapshot = IpcStructuredClone.CloneArguments(arguments);
         queue.Enqueue(() =>
         {
-            renderer.EnsureAlive();
             IpcMain.DispatchSend(renderer, channel, snapshot);
             return ValueTask.CompletedTask;
         });
@@ -298,42 +341,27 @@ public sealed class ElectronIpcRuntime
         IReadOnlyList<IpcValue> arguments)
     {
         ArgumentException.ThrowIfNullOrEmpty(channel);
+        renderer.EnsureAlive();
         var snapshot = IpcStructuredClone.CloneArguments(arguments);
         var completion = new TaskCompletionSource<IpcValue>(TaskCreationOptions.RunContinuationsAsynchronously);
         queue.Enqueue(async () =>
         {
             try
             {
-                renderer.EnsureAlive();
                 var result = await IpcMain.DispatchInvokeAsync(renderer, channel, snapshot).ConfigureAwait(false);
                 renderer.EnsureAlive();
                 completion.TrySetResult(IpcStructuredClone.Clone(result));
             }
-            catch (IpcRendererDestroyedException exception)
+            catch (Exception exception) when (
+                exception is IpcRendererDestroyedException
+                or IpcDataCloneException
+                or IpcNoHandlerException
+                or IpcRemoteException)
             {
                 completion.TrySetException(exception);
-            }
-            catch (IpcDataCloneException exception)
-            {
-                completion.TrySetException(exception);
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(new IpcRemoteException(exception.GetType().Name, exception.Message));
             }
         });
         return completion.Task;
-    }
-
-    internal IpcValue SendSync(
-        IpcRenderer renderer,
-        string channel,
-        IReadOnlyList<IpcValue> arguments)
-    {
-        ArgumentException.ThrowIfNullOrEmpty(channel);
-        renderer.EnsureAlive();
-        var snapshot = IpcStructuredClone.CloneArguments(arguments);
-        return IpcMain.DispatchSync(renderer, channel, snapshot);
     }
 
     internal void EnqueueMainToRenderer(
@@ -342,6 +370,7 @@ public sealed class ElectronIpcRuntime
         IReadOnlyList<IpcValue> arguments)
     {
         ArgumentException.ThrowIfNullOrEmpty(channel);
+        renderer.EnsureAlive();
         var snapshot = IpcStructuredClone.CloneArguments(arguments);
         queue.Enqueue(() => renderer.DeliverAsync(channel, snapshot));
     }
