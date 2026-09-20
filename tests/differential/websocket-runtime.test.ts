@@ -162,7 +162,11 @@ test('Node vs generated C#: deterministic WebSocket lifecycle/runtime contract',
     const node = await run(process.execPath, ['input.cjs'], dir);
     const csharp = await run(process.env.DOTNET ?? 'dotnet', [path.join(dir, 'bin/Debug/net8.0/J2cs.WebSocketDiff.dll')], dir);
     assert.equal(node.exit, 0, `Node oracle failed:\n${node.stdout}\n${node.stderr}`);
-    assert.deepEqual(csharp, node, 'WebSocket runtime trace differs from Node oracle');
+    assert.deepEqual(
+      { ...csharp, stdout: csharp.stdout.replaceAll('\r\n', '\n'), stderr: csharp.stderr.replaceAll('\r\n', '\n') },
+      { ...node, stdout: node.stdout.replaceAll('\r\n', '\n'), stderr: node.stderr.replaceAll('\r\n', '\n') },
+      'WebSocket runtime trace differs from Node oracle'
+    );
   } catch (error) {
     throw new Error(`WebSocket differential failed; artifacts: ${dir}: ${String(error)}`, { cause: error });
   } finally {
