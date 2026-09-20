@@ -1,5 +1,10 @@
 namespace J2cs.Runtime.ElectronCompat;
 
+public static class Preload
+{
+    public static bool DefaultContextIsolation() => true;
+}
+
 public sealed class PreloadContext
 {
     private readonly Dictionary<string, BridgeValue> isolatedWindow = new(StringComparer.Ordinal);
