@@ -205,8 +205,8 @@ test('Node vs C# collection runtime: SameValueZero, ordering, mutation and weak 
     assert.equal(node.exit, 0, node.stderr);
     const normalizeExecution = (execution: typeof node) => ({
       ...execution,
-      stdout: execution.stdout.replace(/\\r\\n/g, '\\n'),
-      stderr: execution.stderr.replace(/\\r\\n/g, '\\n'),
+      stdout: execution.stdout.replace(/\r\n/g, '\n'),
+      stderr: execution.stderr.replace(/\r\n/g, '\n'),
     });
     assert.deepEqual(normalizeExecution(csharp), normalizeExecution(node), 'Collection runtime differs from Node (stdout/stderr/exit/signal)');
     await rm(dir, { recursive: true, force: true });
