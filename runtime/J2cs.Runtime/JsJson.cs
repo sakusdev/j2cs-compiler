@@ -267,8 +267,9 @@ public static class JsJson
                     case 'r': result.Append('\r'); break;
                     case 't': result.Append('\t'); break;
                     case 'u':
+                        ushort unit = 0;
                         if (cursor + 4 > text.Length
-                            || !ushort.TryParse(text.AsSpan(cursor, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var unit))
+                            || !ushort.TryParse(text.AsSpan(cursor, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out unit))
                             Syntax("Invalid Unicode escape");
                         result.Append((char)unit);
                         cursor += 4;
