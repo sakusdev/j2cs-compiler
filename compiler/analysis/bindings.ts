@@ -142,7 +142,7 @@ export function resolveBindings(program: Program): Bindings {
   }
   body(program.body, { parent: global, owner: 0, names: new Map() }, true, 0);
   for (const [owner, use] of thisUses) {
-    const binding = functions.find(candidate => candidate.function?.id + 1 === owner);
+    const binding = functions.find(candidate => candidate.function !== undefined && candidate.function.id + 1 === owner);
     if (binding && !invokedFunctions.has(binding.id))
       fail('E_UNSUPPORTED_SYNTAX', 'Function this requires a proven direct call or construction in the closed profile.', use.span);
   }
