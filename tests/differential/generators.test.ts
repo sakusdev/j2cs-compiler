@@ -81,6 +81,17 @@ const fixtures: Fixture[] = [
     `,
   },
   {
+    name: 'generator-yield-star-array-eager-element-order',
+    source: `
+      function* g(){ yield* [console.log('a'), console.log('b')]; }
+      const it = g();
+      console.log('before');
+      it.next();
+      console.log('after-first');
+      it.next();
+    `,
+  },
+  {
     name: 'generator-yield-star-array',
     source: `
       function* g(){ yield* [1,2]; return 3; }
