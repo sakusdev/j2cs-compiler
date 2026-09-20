@@ -49,11 +49,14 @@ public static class NodeUrl
             return "\\\\" + host + uncPath;
         }
 
-        if (decodedPath.Length < 3 || decodedPath[0] != '/' ||
-            !IsAsciiLetter(decodedPath[1]) || decodedPath[2] != ':')
-            throw new NodeUrlException("ERR_INVALID_FILE_URL_PATH", "Windows file URLs require an absolute drive path or UNC host.");
+        if (decodedPath.Length >= 3 && decodedPath[0] == '/' &&
+            IsAsciiLetter(decodedPath[1]) && decodedPath[2] == ':')
+            return decodedPath[1..].Replace('/', '\\');
 
-        return decodedPath[1..].Replace('/', '\\');
+        if (decodedPath.Length >= 2 && IsAsciiLetter(decodedPath[0]) && decodedPath[1] == ':')
+            return decodedPath.Replace('/', '\\');
+
+        throw new NodeUrlException("ERR_INVALID_FILE_URL_PATH", "Windows file URLs require an absolute drive path or UNC host.");
     }
 
     private static bool ContainsEncodedSeparator(string rawPath, NodeUrlPlatformMode platformMode)
