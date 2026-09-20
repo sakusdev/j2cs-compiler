@@ -12,6 +12,7 @@ import {
 const completeFacts: WebSocketProofFacts = {
   webBuiltinIntegrity: { value: 'pristine', evidence: 'closed browser host profile resolves the intrinsic WebSocket binding' },
   networkBoundary: { value: 'browser-host', evidence: 'DNS/proxy/TLS/upgrade/framing are delegated to the browser host adapter' },
+  urlResolution: { value: 'relevant-settings-object', evidence: 'constructor URLs resolve against the browser relevant-settings-object base' },
   taskDispatch: { value: 'event-loop', evidence: 'host callbacks enqueue browser-style tasks rather than invoking synchronously' },
 };
 
@@ -58,6 +59,6 @@ test('source-level WebSocket syntax remains fail-closed until renderer/host wiri
   const index = await createCompiler();
   assert.throws(
     () => compile("const s = new WebSocket('wss://example.com/socket'); console.log(s.readyState);", index),
-    /unsupported|WebSocket|syntax/i
+    /not supported|unsupported|WebSocket|syntax/i
   );
 });
