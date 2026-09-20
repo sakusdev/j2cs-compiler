@@ -7,7 +7,7 @@ public static class NodeUtil
     public static string Format(JsValue format, params JsValue[] args)
     {
         if (format.Kind != JsKind.String)
-            return string.Join(" ", new[] { format }.Concat(args).Select(InspectPrimitive));
+            return JoinValues(new[] { format }.Concat(args));
 
         string formatString = format.String;
         if (args.Length == 0) return formatString;
