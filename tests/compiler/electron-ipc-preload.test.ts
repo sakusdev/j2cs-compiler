@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { Facts } from '../../compiler/analysis/facts.js';
 import { ROOT } from '../../compiler/index.js';
 import { loadRules } from '../../compiler/rules/loader.js';
@@ -33,6 +34,19 @@ test('Electron IPC/preload adapters pin the reviewed canonical j2cs contracts', 
     if (spec.helper !== undefined)
       assert.equal(rule.rule.target.helper, spec.helper, spec.ruleId + ' helper drift');
   }
+});
+
+test('Electron IPC/preload proof registry does not bypass unmerged source/module wiring', async () => {
+  const adapters = JSON.parse(
+    await readFile(path.join(ROOT, 'compiler/rules/adapters.json'), 'utf8'),
+  ) as { adapters: Array<{ ruleId: string }> };
+  const globallyEnabled = new Set(adapters.adapters.map(adapter => adapter.ruleId));
+  for (const spec of ELECTRON_IPC_PRELOAD_RULES)
+    assert.equal(
+      globallyEnabled.has(spec.ruleId),
+      false,
+      spec.ruleId + ' must remain fail-closed in the shared source-lowering registry',
+    );
 });
 
 test('ipcMain rules require exact main-process binding and typed runtime proof', () => {
