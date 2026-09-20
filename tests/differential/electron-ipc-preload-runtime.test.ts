@@ -223,12 +223,6 @@ function sendSync(channel, ...args) {
   for (const listener of mainListeners.get(channel) ?? []) listener(snapshot, event);
   return structuredClone(event.returnValue);
 }
-function sendSync(channel, ...args) {
-  const snapshot = cloneArgs(args);
-  const event = { returnValue: undefined };
-  for (const listener of mainListeners.get(channel) ?? []) listener(snapshot, event);
-  return structuredClone(event.returnValue);
-}
 function invoke(channel, ...args) {
   const snapshot = cloneArgs(args);
   let resolve, reject;
