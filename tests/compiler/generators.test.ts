@@ -93,6 +93,18 @@ test('bare yield and array delegation close use dedicated canonical rules', () =
   assert.ok(array.trace.some(t => t.ruleId === 'generator.yield-star.return-missing'));
 });
 
+test('yield star array materializes all elements before the first suspension', () => {
+  const result = compile(`
+    function* g(){ yield* [console.log('a'), console.log('b')]; }
+    const it = g(); it.next();
+  `, index);
+  const first = result.source.indexOf('__arrayDelegate0 = JsConsole.Log');
+  const second = result.source.indexOf('__arrayDelegate1 = JsConsole.Log');
+  const suspend = result.source.indexOf('return JsGeneratorStep.Yield(__arrayDelegate0)');
+  assert.ok(first >= 0 && second > first && suspend > second);
+  assert.ok(result.structuralContracts.includes('generator.yield-star.array-eager-elements-v1'));
+});
+
 test('adjacent generator features stay fail closed until owning lanes merge', () => {
   rejects('async function* g(){ yield 1; }', 'E_GENERATOR_ASYNC_DEFERRED');
   rejects('function* g(){ try { yield 1; } finally {} }', 'E_GENERATOR_EXCEPTIONS_DEPENDENCY');
