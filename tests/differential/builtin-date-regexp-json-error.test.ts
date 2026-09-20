@@ -101,6 +101,7 @@ internal static class Program
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="runtime/**/*.cs" />
     <ProjectReference Include="runtime/J2cs.Runtime/J2cs.Runtime.csproj" />
   </ItemGroup>
 </Project>
