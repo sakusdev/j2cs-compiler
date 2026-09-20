@@ -50,6 +50,7 @@ test('constructor lane fails closed for adjacent unsupported call and target cas
   rejects('new (1)();', 'E_CONSTRUCT_TARGET');
   rejects('function C(x){}; new C();', 'E_ARITY');
   rejects('function C(){ return this; } C();', 'E_THIS_CALL_UNSUPPORTED');
+  rejects('function Unused(){ return this; }', 'E_UNSUPPORTED_SYNTAX');
   rejects('this.x = 1;', 'E_THIS_CONTEXT');
   rejects('function C(){}; console.log(C.prototype);', 'E_FUNCTION_VALUE');
 });
