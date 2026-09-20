@@ -176,6 +176,13 @@ public sealed class ContextBridge
         return api;
     }
 
+    public static BridgeValue RejectRawIpcRenderer(BridgeValue value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ValidateSafeWrapperTree(value);
+        return value;
+    }
+
     private static void ValidateSafeWrapperTree(BridgeValue value)
     {
         switch (value)
