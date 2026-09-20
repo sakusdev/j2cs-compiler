@@ -15,7 +15,7 @@ class Model {
     if (u.protocol === 'http:') u.protocol = 'ws:';
     else if (u.protocol === 'https:') u.protocol = 'wss:';
     else if (u.protocol !== 'ws:' && u.protocol !== 'wss:') throw new ContractError('SyntaxError', 'scheme');
-    const sep = '()<>@,;:\\"/[]?={} \\t';
+    const sep = '()<>@,;:\\"/[]?={} \t';
     const seen = new Set();
     for (const p of protocols) {
       if (!p || [...p].some(c => c.charCodeAt(0) < 0x21 || c.charCodeAt(0) > 0x7e || sep.includes(c)) || seen.has(p))
@@ -161,7 +161,7 @@ test('Node vs generated C#: deterministic WebSocket lifecycle/runtime contract',
     assert.equal(build.exit, 0, `dotnet build failed:\n${build.stdout}\n${build.stderr}`);
     const node = await run(process.execPath, ['input.cjs'], dir);
     const csharp = await run(process.env.DOTNET ?? 'dotnet', [path.join(dir, 'bin/Debug/net8.0/J2cs.WebSocketDiff.dll')], dir);
-    assert.equal(node.exit, 0);
+    assert.equal(node.exit, 0, `Node oracle failed:\n${node.stdout}\n${node.stderr}`);
     assert.deepEqual(csharp, node, 'WebSocket runtime trace differs from Node oracle');
   } catch (error) {
     throw new Error(`WebSocket differential failed; artifacts: ${dir}: ${String(error)}`, { cause: error });
