@@ -4,6 +4,7 @@ import path from 'node:path';
 import { Facts } from '../../compiler/analysis/facts.js';
 import {
   ELECTRON_RULE_CONTRACTS,
+  ElectronContractRegistry,
   electronMainHostFacts,
   loadElectronContractRegistry,
 } from '../../compiler/electron/contracts.js';
@@ -77,6 +78,15 @@ test('dynamic WebContents source remains explicitly unsupported even with comple
   assert.equal(selected.proof.verdict, 'proven');
   assert.equal(selected.contract?.strategy, 'unsupported');
   assert.match(selected.contract?.runtimeContract ?? '', /explicit rejection/);
+});
+
+test('registry instances cannot prove contracts that were not explicitly supplied', () => {
+  const empty = new ElectronContractRegistry([]);
+  const facts = electronMainHostFacts(true, true)
+    .prove('electron.moduleBinding', 'electron.app', 'Resolved import/require binding is electron.app');
+  const result = empty.prove('electron.app.whenready', facts);
+  assert.equal(result.proof.verdict, 'unknown');
+  assert.equal(result.contract, undefined);
 });
 
 test('unknown Electron rule IDs never acquire a lowering contract', () => {
