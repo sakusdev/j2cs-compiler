@@ -57,6 +57,30 @@ const fixtures: Fixture[] = [
     `,
   },
   {
+    name: 'generator-bare-yield-resume',
+    source: `
+      function* g(){ return yield; }
+      const it = g();
+      let r = it.next();
+      console.log(r.value === undefined, r.done);
+      r = it.next(8);
+      console.log(r.value === 8, r.done);
+    `,
+  },
+  {
+    name: 'generator-yield-star-array-return-missing',
+    source: `
+      function* g(){ yield* [1,2]; return 4; }
+      const it = g();
+      let r = it.next();
+      console.log(r.value === 1, r.done);
+      r = it.return(9);
+      console.log(r.value === 9, r.done);
+      r = it.next();
+      console.log(r.value === undefined, r.done);
+    `,
+  },
+  {
     name: 'generator-yield-star-array',
     source: `
       function* g(){ yield* [1,2]; return 3; }
