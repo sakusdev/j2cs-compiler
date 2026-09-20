@@ -210,6 +210,7 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           default: return fail('E_LOWERING', `Unimplemented intrinsic lowering ${op}.`, e.span);
         }
     }
+    return fail('E_LOWERING', 'Unimplemented semantic expression.', e.span);
   }
   function condition(e: SE): CE {
     if (exactly(e.types, 'Boolean')) { contracts.add('core.boolean-condition'); return unbox(expression(e), 'boolean'); }
