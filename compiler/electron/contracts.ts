@@ -149,9 +149,11 @@ export interface ElectronContractSelection {
 }
 
 export class ElectronContractRegistry {
-  private readonly byId = new Map(ELECTRON_RULE_CONTRACTS.map(contract => [contract.ruleId, contract] as const));
+  private readonly byId: ReadonlyMap<string, ElectronRuleContract>;
 
-  constructor(public readonly contracts: readonly ElectronRuleContract[]) {}
+  constructor(public readonly contracts: readonly ElectronRuleContract[]) {
+    this.byId = new Map(contracts.map(contract => [contract.ruleId, contract] as const));
+  }
 
   prove(ruleId: string, facts: FactModel): ElectronContractSelection {
     const contract = this.byId.get(ruleId);
