@@ -55,14 +55,13 @@ structured diagnostics including source location and failed rule proofs.
 | Comparisons | Number `< <= > >=`; primitive and Object/Array identity `===` / `!==` |
 | Statements | Expression statements, blocks, `if` / `else`, `return`, empty statements |
 | Objects / arrays | Ordinary static data properties, sparse array literals, static string/index reads and writes, `length`, builtin `push`, `Object.hasOwn`, identity |\n| Conditions | JavaScript truthiness and `!`, including Object/Array truthiness |
-| Functions | Top-level ordinary declarations; known direct calls, exact arity, primitive parameters/results, hoisting, bare/fallthrough return |
+| Functions | Ordinary declarations and anonymous function expressions; nested lexical closures, function values/identity, recursion/mutual recursion, known callable parameters/returns, missing→`undefined` and evaluated extra arguments, hoisting, arbitrary admitted return values |
 | TypeScript | Erasable scalar variable/parameter/return annotations; annotations are **not** trusted as runtime facts |
 | Host output | `console.log` for primitives; multiple arguments when the first is proven non-String or a literal String without `%` |
 
 The supported profile is a **closed single-file Node module with pristine
 intrinsics**. No injected globals, preload scripts, or external callable entry
-points are modeled. Functions specialize from actual call-site type facts;
-function values cannot escape. See [limitations](docs/limitations.md).
+points are modeled. Functions specialize body lowering from proven call-site facts while JavaScript callable identity and lexical capture live in the runtime `JsFunction`/`JsEnvironment` model. Calls are accepted only when analysis proves a single function template; unsupported dynamic callable unions fail closed. See [limitations](docs/limitations.md).
 
 ## Tests
 
@@ -78,8 +77,7 @@ npm run coverage:gaps
 Differential tests compile each fixture, run `dotnet build`, execute Node and the
 produced assembly, and compare stdout, stderr, exit status and explicit observable
 expression probes. They cover signed zero, NaN, infinities, string encodings,
-truthiness, scope/shadowing, flow joins, evaluation order, function specialization,
-and binary64 number formatting. Missing .NET is a test failure, never a silent skip.
+truthiness, scope/shadowing, flow joins, evaluation order, callable identity, lexical capture, recursion/mutual recursion, flexible arity, function specialization, and binary64 number formatting. Missing .NET is a test failure, never a silent skip.
 Set `DOTNET` to an SDK executable path if `dotnet` is not on PATH.
 
 CI runs compiler/differential tests on Linux and Windows, plus the original rule
@@ -96,7 +94,7 @@ compiler/ir/              semantic IR and typed C# emission IR
 compiler/lowering/        guarded rule dispatch and compatibility calls
 compiler/diagnostics/     explicit source diagnostics
 compiler/emit/            C# emitter and standalone project generation
-runtime/J2cs.Runtime/     tagged values, JsObject/JsArray, and canonical helpers
+runtime/J2cs.Runtime/     tagged values, JsObject/JsArray/JsFunction, lexical environments, and canonical helpers
 rule-db/                  pinned j2cs Git submodule; upstream owns the rules
 tests/compiler/           binding, diagnostics, rule/proof infrastructure tests
 tests/differential/       Node vs generated C# executable comparisons

@@ -247,6 +247,30 @@
       "lowering": "call.function"
     },
     {
+      "ruleId": "function.call.missing-arguments",
+      "sha256": "d429ece204854f778d8ee304ea14f80b5080bfc4b19b8f026afa34bba3b9b530",
+      "selector": {
+        "kind": "call.function.missing"
+      },
+      "lowering": "call.function"
+    },
+    {
+      "ruleId": "function.call.extra-arguments",
+      "sha256": "63e162d81ec90d445711de6ce2c474035a8309bbf8e90780526a67bfad3ea1b3",
+      "selector": {
+        "kind": "call.function.extra"
+      },
+      "lowering": "call.function"
+    },
+    {
+      "ruleId": "function.closure.capture-mutable-binding",
+      "sha256": "23d3e04bc36b826bbe4104af9acdcdfddccd16257561816f5b2c9a72e54b5b3d",
+      "selector": {
+        "kind": "closure.capture"
+      },
+      "lowering": "closure.shared-cell"
+    },
+    {
       "ruleId": "function.declaration.hoisted-binding",
       "sha256": "4e9228bf68b1ebd5e4c7ea45fedfee753727f861a936090e5e620915ff69851e",
       "selector": {

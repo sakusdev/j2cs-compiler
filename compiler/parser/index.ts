@@ -39,8 +39,32 @@ export function parse(source: string, file = 'input.js'): Program {
     if (ts.isNumericLiteral(n)) return String(Number(n.text));
     return unsupported(n, 'Dynamic computed property key');
   }
+  function parameters(nodes: ts.NodeArray<ts.ParameterDeclaration>): import('./ast.js').Parameter[] {
+    return nodes.map(p => {
+      if (!ts.isIdentifier(p.name) || p.initializer || p.dotDotDotToken || p.questionToken || p.modifiers?.length)
+        unsupported(p, 'Default/rest/optional/destructured parameter');
+      annotation(p.type);
+      return { ...meta(p), name: p.name.text };
+    });
+  }
   function expr(n: ts.Expression): Expr {
     const m = meta(n);
+    if (n.kind === ts.SyntaxKind.ThisKeyword)
+      return fail('E_THIS_UNSUPPORTED', 'this requires ordinary-call receiver semantics that are not implemented.', m.span);
+    if (ts.isMetaProperty(n) && n.keywordToken === ts.SyntaxKind.NewKeyword)
+      return fail('E_NEW_TARGET_UNSUPPORTED', 'new.target requires constructor-call state that is not implemented.', m.span);
+    if (ts.isArrowFunction(n))
+      return fail('E_ARROW_FUNCTION_UNSUPPORTED', 'Arrow functions require lexical this/arguments/new.target analysis.', m.span);
+    if (ts.isNewExpression(n))
+      return fail('E_CONSTRUCT_UNSUPPORTED', 'Construction/new is outside the callable-function profile.', m.span);
+    if (ts.isFunctionExpression(n)) {
+      if (n.name) return fail('E_NAMED_FUNCTION_EXPRESSION', 'Named function expressions need a private self-binding and are deferred.', m.span);
+      if (n.asteriskToken || n.modifiers?.length || n.typeParameters?.length)
+        unsupported(n, 'Async/generator/generic function expression');
+      annotation(n.type);
+      return { ...m, kind: 'functionExpr', params: parameters(n.parameters),
+        body: statement(n.body)[0] as Statement & { kind: 'block' } };
+    }
     if (ts.isParenthesizedExpression(n)) return expr(n.expression);
     if (ts.isNumericLiteral(n)) return { ...m, kind: 'literal', value: Number(n.text) };
     if (ts.isStringLiteral(n)) return { ...m, kind: 'literal', value: n.text };
@@ -165,13 +189,7 @@ export function parse(source: string, file = 'input.js'): Program {
       if (!n.name || !n.body || n.asteriskToken || n.modifiers?.length || n.typeParameters?.length)
         unsupported(n, 'Async/generator/ambient/exported/generic function');
       annotation(n.type);
-      const params = n.parameters.map(p => {
-        if (!ts.isIdentifier(p.name) || p.initializer || p.dotDotDotToken || p.questionToken || p.modifiers?.length)
-          unsupported(p, 'Default/rest/optional/destructured parameter');
-        annotation(p.type);
-        return { ...meta(p), name: p.name.text };
-      });
-      return [{ ...m, kind: 'function', name: n.name.text, params,
+      return [{ ...m, kind: 'function', name: n.name.text, params: parameters(n.parameters),
         body: statement(n.body)[0] as Statement & { kind: 'block' } }];
     }
     return unsupported(n);

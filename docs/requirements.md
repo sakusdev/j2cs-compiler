@@ -16,8 +16,8 @@ All rule tiers require `proven`, including helpers and runtime candidates.
 | intrinsic global binding / not shadowed | Lexical binder ID, origin and intrinsic identity |
 | builtin/member not overridden | Closed-profile effect restrictions and pristine member evidence |
 | callback identity known | Resolved identity fact; unknown unless a producer provides it |
-| known target / arity / simple parameters | Resolved declaration and actual call signature |
-| function identity/properties/this/arguments unused | Complete syntax and reference-use checks |
+| known target / arity / simple parameters | Resolved callable template, complete formal list, and actual supplied-argument count |
+| function identity/properties/this/arguments unused | Complete syntax/reference-use checks; function identity may be explicitly modeled instead of assumed unobservable |
 | `host`, `platform`, `node_profile`, `electron_profile` | Explicit compilation profile facts |
 
 This is a vocabulary adapter, not a per-rule dictionary of arbitrary booleans.

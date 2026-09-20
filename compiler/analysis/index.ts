@@ -4,10 +4,10 @@ import type { SemanticExpr as SE, SemanticForInitializer, SemanticFunction, Sema
 import { type Binding, type Bindings } from './bindings.js';
 import { exactly, hasReference, literalType, union, type TypeSet } from './facts.js';
 
-interface ValueInfo { types: TypeSet; refs?: readonly number[] }
+interface ValueInfo { types: TypeSet; refs?: readonly number[]; functionIds?: readonly number[] }
 interface Shape { kind: 'Object' | 'Array'; properties: Map<string, ValueInfo>; length?: number }
 type Environment = Map<number, ValueInfo>;
-interface Flow { env: Environment; heap: Map<number, Shape>; reachable: boolean; returns: TypeSet[]; loopDepth: number }
+interface Flow { env: Environment; heap: Map<number, Shape>; reachable: boolean; returns: ValueInfo[]; loopDepth: number; owner: number }
 interface State { env: Environment; heap: Map<number, Shape> }
 interface LoopControl { breaks: State[]; continues: State[] }
 const MAX_LOOP_FIXPOINT = 16;
@@ -21,18 +21,38 @@ const arrayPrototypeKeys = new Set(['at', 'concat', 'copyWithin', 'entries', 'ev
   'splice', 'toLocaleString', 'toReversed', 'toSorted', 'toSpliced', 'toString', 'unshift', 'values', 'with']);
 
 export function analyze(program: Program, bindings: Bindings): SemanticProgram {
-  const instances: SemanticFunction[] = [], cache = new Map<string, SemanticFunction>(), active = new Set<number>();
+  const instances: SemanticFunction[] = [], cache = new Map<string, SemanticFunction>();
+  const summaries = new Map<number, ValueInfo>();
+  let captureEpoch = 0;
+  const functionById = new Map(bindings.functions.map(b => [b.id, b]));
   let nextInstance = 0;
   const syntheticUndefined = (n: Node): SE => ({ ...n, kind: 'literal', value: undefined, types: ['Undefined'] });
-  const valueOf = (e: SE): ValueInfo => ({ types: e.types, ...(e.refs ? { refs: e.refs } : {}) });
-  const cloneValue = (v: ValueInfo): ValueInfo => ({ types: v.types, ...(v.refs ? { refs: [...v.refs] } : {}) });
+  const valueOf = (e: SE): ValueInfo => ({ types: e.types, ...(e.refs ? { refs: e.refs } : {}),
+    ...(e.functionIds ? { functionIds: e.functionIds } : {}) });
+  const cloneValue = (v: ValueInfo): ValueInfo => ({ types: v.types, ...(v.refs ? { refs: [...v.refs] } : {}),
+    ...(v.functionIds ? { functionIds: [...v.functionIds] } : {}) });
   const withValue = <T extends object>(node: T, value: ValueInfo): T & ValueInfo =>
-    ({ ...node, types: value.types, ...(value.refs ? { refs: value.refs } : {}) });
+    ({ ...node, types: value.types, ...(value.refs ? { refs: value.refs } : {}),
+      ...(value.functionIds ? { functionIds: value.functionIds } : {}) });
 
   function unionValue(...values: ValueInfo[]): ValueInfo {
     const types = union(...values.map(v => v.types));
     const refs = [...new Set(values.flatMap(v => v.refs ?? []))].sort((a, b) => a - b);
-    return { types, ...(refs.length ? { refs } : {}) };
+    const functionIds = [...new Set(values.flatMap(v => v.functionIds ?? []))].sort((a, b) => a - b);
+    return { types, ...(refs.length ? { refs } : {}), ...(functionIds.length ? { functionIds } : {}) };
+  }
+  function functionValue(binding: Binding): ValueInfo { return { types: ['Function'], functionIds: [binding.id] }; }
+  function record(binding: Binding, value: ValueInfo): void {
+    const old = summaries.get(binding.id);
+    const next = old ? unionValue(old, value) : cloneValue(value);
+    if (bindings.capturedIds.has(binding.id) && (!old || !sameValue(old, next))) captureEpoch++;
+    summaries.set(binding.id, next);
+  }
+  function applyCapturedSummaries(f: Flow): void {
+    for (const id of bindings.capturedIds) {
+      const current = f.env.get(id), summary = summaries.get(id);
+      if (current && summary) f.env.set(id, unionValue(current, summary));
+    }
   }
   function cloneEnv(env: Environment): Environment {
     return new Map([...env].map(([id, v]) => [id, cloneValue(v)]));
@@ -73,9 +93,10 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   }
   function widen(base: State, paths: State[]): State { return joinStates(base, [base, ...paths]); }
   function sameValue(a: ValueInfo, b: ValueInfo): boolean {
-    const ar=a.refs??[], br=b.refs??[];
+    const ar=a.refs??[], br=b.refs??[], af=a.functionIds??[], bf=b.functionIds??[];
     return a.types.length===b.types.length && a.types.every((t,i)=>t===b.types[i])
-      && ar.length===br.length && ar.every((x,i)=>x===br[i]);
+      && ar.length===br.length && ar.every((x,i)=>x===br[i])
+      && af.length===bf.length && af.every((x,i)=>x===bf[i]);
   }
   function sameEnv(a: Environment, b: Environment): boolean {
     if (a.size !== b.size) return false;
@@ -100,9 +121,11 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       if (b.name === 'NaN' || b.name === 'Infinity') return { types: ['Number'] };
       return fail('E_INTRINSIC_ESCAPE', `Intrinsic '${b.name}' is not a first-class value in this profile.`, n.span);
     }
-    const value = f.env.get(b.id);
-    if (!value) fail('E_TDZ', `Binding '${b.name}' is accessed before initialization.`, n.span);
-    return value;
+    const value = f.env.get(b.id), summary = summaries.get(b.id);
+    if (value) return bindings.capturedIds.has(b.id) && summary ? unionValue(value, summary) : value;
+    if (b.owner !== f.owner && summary) return summary;
+    if (b.kind === 'function') return functionValue(b);
+    return fail('E_TDZ', `Binding '${b.name}' is accessed before initialization.`, n.span);
   }
   function addTypes(left: TypeSet, right: TypeSet): TypeSet {
     if (hasReference(left) || hasReference(right)) return ['Number', 'String'];
@@ -110,6 +133,8 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     return left.includes('String') || right.includes('String') ? ['Number', 'String'] : ['Number'];
   }
   function requireReference(value: SE, f: Flow, operation: string): readonly number[] {
+    if (value.types.includes('Function'))
+      fail('E_FUNCTION_PROPERTY', `${operation} on function objects requires callable-object property semantics that are deferred.`, value.span);
     if (value.types.some(t => t !== 'Object' && t !== 'Array') || !value.refs?.length)
       fail('E_PROPERTY_RECEIVER', `${operation} requires a proven compiler-owned Object/Array receiver.`, value.span);
     for (const ref of value.refs) if (!f.heap.has(ref)) fail('E_PROPERTY_FLOW', 'Object identity escaped the analyzable heap.', value.span);
@@ -142,31 +167,105 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
     }
   }
+  function guessedReturnTypes(b: Binding, params: Map<number, ValueInfo>): TypeSet {
+    const guesses: TypeSet[] = [];
+    const guess = (n: Expr): TypeSet | undefined => {
+      switch (n.kind) {
+        case 'literal': return literalType(n.value);
+        case 'functionExpr': return ['Function'];
+        case 'identifier': {
+          const binding = bindings.references.get(n.id);
+          if (!binding) return;
+          if (binding.kind === 'intrinsic') {
+            if (binding.name === 'undefined') return ['Undefined'];
+            if (binding.name === 'NaN' || binding.name === 'Infinity') return ['Number'];
+            return;
+          }
+          return params.get(binding.id)?.types ?? summaries.get(binding.id)?.types
+            ?? (binding.kind === 'function' ? ['Function'] : undefined);
+        }
+        case 'binary': {
+          if (['<', '<=', '>', '>=', '==', '!=', '===', '!=='].includes(n.op)) return ['Boolean'];
+          if (n.op !== '+') return ['Number'];
+          const l=guess(n.left), r=guess(n.right);
+          return l && r ? addTypes(l,r) : ['Number','String'];
+        }
+        case 'unary': return [n.op === '!' ? 'Boolean' : 'Number'];
+        case 'assign': return guess(n.value);
+        case 'compound': return n.op === '+=' ? ['Number','String'] : ['Number'];
+        case 'update': return ['Number'];
+        case 'object': return ['Object'];
+        case 'array': return ['Array'];
+        case 'member': case 'call': return;
+      }
+    };
+    const scan = (nodes: Statement[]): void => {
+      for (const n of nodes) {
+        if (n.kind === 'return') guesses.push(n.value ? (guess(n.value) ?? []) : ['Undefined']);
+        else if (n.kind === 'block') scan(n.body);
+        else if (n.kind === 'if') {
+          if (n.then.kind === 'block') scan(n.then.body); else scan([n.then]);
+          if (n.otherwise) n.otherwise.kind === 'block' ? scan(n.otherwise.body) : scan([n.otherwise]);
+        } else if (n.kind === 'while' || n.kind === 'doWhile' || n.kind === 'for') {
+          n.body.kind === 'block' ? scan(n.body.body) : scan([n.body]);
+        }
+      }
+    };
+    scan(b.function!.body.body);
+    const useful=guesses.filter(g=>g.length);
+    return useful.length ? union(...useful) : ['Undefined'];
+  }
+
+  function specializationValueKey(value: ValueInfo | undefined): string {
+    if (!value) return '?';
+    return `${value.types.join('|')}#r:${(value.refs ?? []).join('|')}#f:${(value.functionIds ?? []).join('|')}`;
+  }
+  function captureSignature(fn: NonNullable<Binding['function']>): string {
+    const captures = bindings.captures.get(fn.id + 1) ?? [];
+    return captures.map(binding => `${binding.id}=${specializationValueKey(summaries.get(binding.id))}`).join(',');
+  }
   function instantiate(b: Binding, args: SE[], callNode: Node): SemanticFunction {
     const fn = b.function!;
-    if (args.length !== fn.params.length) fail('E_ARITY', 'Only exact-arity direct function calls are supported.', callNode.span);
-    if (args.some(a => hasReference(a.types)))
+    if (args.some(a => a.types.some(t => t === 'Object' || t === 'Array')))
       fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object/Array arguments require alias/effect summaries and are deferred.', callNode.span);
-    if (active.has(b.id)) fail('E_RECURSION', 'Recursive call graphs require a summary fixed point; unsupported in this MVP.', callNode.span);
-    const key = `${b.id}:${args.map(a => a.types.join('|')).join(',')}`;
+    const params = fn.params.map(p => bindings.declarations.get(p.id)!);
+    const formal = params.map((_, i) => args[i] ?? syntheticUndefined(callNode));
+    const key = `${b.id}:epoch=${captureEpoch}:args=${formal.map(valueOf).map(specializationValueKey).join(',')}:captures=${captureSignature(fn)}`;
     const found = cache.get(key); if (found) return found;
-    active.add(b.id);
-    const instanceId = nextInstance++, params = fn.params.map(p => bindings.declarations.get(p.id)!);
-    const f: Flow = { env: new Map(params.map((p, i) => [p.id, valueOf(args[i]!)])), heap: new Map(), reachable: true, returns: [], loopDepth: 0 };
-    const body = statements(fn.body.body, f);
-    if (f.reachable) {
-      const value = syntheticUndefined(fn.body);
-      body.push({ ...fn.body, kind: 'return', value }); f.returns.push(value.types);
+    const seedEnv = new Map(params.map((p, i) => [p.id, valueOf(formal[i]!)]));
+    const instance: SemanticFunction = {
+      ...fn, instanceId: nextInstance++, binding: b, params, body: [],
+      returnTypes: guessedReturnTypes(b, seedEnv), returnFunctionIds: [],
+    };
+    instances.push(instance); cache.set(key, instance);
+    let previousTypes = '', previousFunctions = '';
+    for (let pass=0; pass<8; pass++) {
+      const f: Flow = { env: new Map(params.map((p, i) => [p.id, valueOf(formal[i]!) ])),
+        heap: new Map(), reachable: true, returns: [], loopDepth: 0, owner: fn.id + 1 };
+      params.forEach((p,i)=>record(p,valueOf(formal[i]!)));
+      const body = statements(fn.body.body, f);
+      if (f.reachable) {
+        const value = syntheticUndefined(fn.body);
+        body.push({ ...fn.body, kind: 'return', value }); f.returns.push(valueOf(value));
+      }
+      const returnTypes = f.returns.length ? union(...f.returns.map(r=>r.types)) : ['Undefined'] as TypeSet;
+      const returnFunctionIds = [...new Set(f.returns.flatMap(r=>r.functionIds??[]))].sort((a,b)=>a-b);
+      instance.body = body; instance.returnTypes = returnTypes; instance.returnFunctionIds = returnFunctionIds;
+      const typeKey=returnTypes.join('|'), functionKey=returnFunctionIds.join('|');
+      if (typeKey===previousTypes && functionKey===previousFunctions) break;
+      previousTypes=typeKey; previousFunctions=functionKey;
     }
-    const instance: SemanticFunction = { ...fn, instanceId, binding: b, params, body, returnTypes: union(...f.returns) };
-    instances.push(instance); cache.set(key, instance); active.delete(b.id); return instance;
+    return instance;
   }
 
   function expression(n: Expr, f: Flow): SE {
     switch (n.kind) {
       case 'literal': return { ...n, types: literalType(n.value) };
+      case 'functionExpr': {
+        const binding = bindings.declarations.get(n.id)!;
+        return withValue({ ...n, kind: 'functionValue' as const, binding }, functionValue(binding));
+      }
       case 'object': {
-        if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
         if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Object allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
         const ref = n.id, shape: Shape = { kind: 'Object', properties: new Map() };
         f.heap.set(ref, shape);
@@ -176,7 +275,6 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         return { ...n, kind: 'object', properties, types: ['Object'], refs: [ref] };
       }
       case 'array': {
-        if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Array literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
         if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Array allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
         const ref = n.id, shape: Shape = { kind: 'Array', length: n.elements.length, properties: new Map() };
         f.heap.set(ref, shape);
@@ -203,7 +301,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         if (n.target.kind === 'identifier') {
           const binding = bindings.references.get(n.target.id)!;
           readType(binding, n.target, f);
-          const value = expression(n.value, f); f.env.set(binding.id, valueOf(value));
+          const value = expression(n.value, f); f.env.set(binding.id, valueOf(value)); record(binding, valueOf(value));
           return withValue({ ...n, kind: 'assign' as const, binding, value }, valueOf(value));
         }
         const object = expression(n.target.object, f), value = expression(n.value, f);
@@ -214,13 +312,13 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         const binding = bindings.references.get(n.target.id)!;
         const left = readType(binding, n.target, f), value = expression(n.value, f);
         const types = n.op === '+=' ? addTypes(left.types, value.types) : ['Number'] as TypeSet;
-        f.env.set(binding.id, { types });
+        const next = { types } as ValueInfo; f.env.set(binding.id, next); record(binding, next);
         return { ...n, binding, leftTypes: left.types, value, types };
       }
       case 'update': {
         const binding = bindings.references.get(n.target.id)!;
         const operand = readType(binding, n.target, f), types: TypeSet = ['Number'];
-        f.env.set(binding.id, { types });
+        const next = { types } as ValueInfo; f.env.set(binding.id, next); record(binding, next);
         return { ...n, binding, operandTypes: operand.types, types };
       }
       case 'member': {
@@ -239,7 +337,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
             if (binding?.kind === 'intrinsic' && binding.name === 'console' && n.callee.property === 'log') {
               const args = n.args.map(a => expression(a, f));
               if (args.some(a => hasReference(a.types)))
-                fail('E_CONSOLE_OBJECT', 'Object/Array console inspection is outside the primitive console host contract.', n.span);
+                fail('E_CONSOLE_OBJECT', 'Object/Array/Function console inspection is outside the primitive console host contract.', n.span);
               if (args.length > 1 && args[0]!.types.includes('String')) {
                 const first = args[0]!;
                 if (first.kind !== 'literal' || typeof first.value !== 'string' || first.value.includes('%'))
@@ -276,26 +374,40 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
           }
           fail('E_INDIRECT_CALL', `Member call '.${n.callee.property}' is not a proven supported intrinsic.`, n.span);
         }
-        if (n.callee.kind !== 'identifier') fail('E_INDIRECT_CALL', 'Only statically resolved direct calls are supported.', n.span);
-        const binding = bindings.references.get(n.callee.id)!;
-        if (binding.kind === 'intrinsic') {
-          if (!['isFinite', 'isNaN', 'parseFloat', 'parseInt'].includes(binding.name))
-            fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
-          const target = binding.name as 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt';
-          const args = n.args.map(a => expression(a, f));
-          const validArity = target === 'parseInt' ? args.length === 1 || args.length === 2 : args.length === 1;
-          if (!validArity) fail('E_ARITY', `Intrinsic ${target} is currently supported only at its reviewed arity.`, n.span);
-          return { ...n, kind: 'call', binding, target, args, arity: args.length,
-            types: target === 'isFinite' || target === 'isNaN' ? ['Boolean'] : ['Number'] };
+        if (n.callee.kind === 'identifier') {
+          const direct = bindings.references.get(n.callee.id)!;
+          if (direct.kind === 'intrinsic') {
+            if (!['isFinite', 'isNaN', 'parseFloat', 'parseInt'].includes(direct.name))
+              fail('E_INDIRECT_CALL', `Calling '${direct.name}' requires callable runtime support.`, n.span);
+            const target = direct.name as 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt';
+            const args = n.args.map(a => expression(a, f));
+            const validArity = target === 'parseInt' ? args.length === 1 || args.length === 2 : args.length === 1;
+            if (!validArity) fail('E_ARITY', `Intrinsic ${target} is currently supported only at its reviewed arity.`, n.span);
+            return { ...n, kind: 'call', binding: direct, target, args, arity: args.length,
+              types: target === 'isFinite' || target === 'isNaN' ? ['Boolean'] : ['Number'] };
+          }
         }
-        if (binding.kind !== 'function') fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
+        const callee = expression(n.callee, f);
+        if (!exactly(callee.types, 'Function') || !callee.functionIds?.length)
+          fail('E_INDIRECT_CALL', 'Call target is not proven to be a supported JavaScript function value.', n.span);
+        if (callee.functionIds.length !== 1)
+          fail('E_AMBIGUOUS_CALLABLE', 'Call target may denote multiple function templates; runtime template dispatch is deferred.', n.span);
+        const binding = functionById.get(callee.functionIds[0]!)!;
         const args = n.args.map(a => expression(a, f)), instance = instantiate(binding, args, n);
-        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length, types: instance.returnTypes };
+        applyCapturedSummaries(f);
+        const callMode = args.length < instance.params.length ? 'missing' : args.length > instance.params.length ? 'extra' : 'exact';
+        return { ...n, kind: 'call', binding, target: instance.instanceId, callee, args, arity: instance.params.length,
+          callMode, types: instance.returnTypes, ...(instance.returnFunctionIds.length ? { functionIds: instance.returnFunctionIds } : {}) };
       }
     }
   }
 
   function statements(nodes: Statement[], f: Flow, loop?: LoopControl): SS[] {
+    for (const n of nodes) {
+      if (n.kind !== 'function') continue;
+      const binding = bindings.declarations.get(n.id)!;
+      const value = functionValue(binding); f.env.set(binding.id, value); record(binding, value);
+    }
     const result: SS[] = [];
     for (const n of nodes) {
       if (!f.reachable) break;
@@ -309,14 +421,13 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       case 'variable': {
         const binding = bindings.declarations.get(n.id)!;
         const initializer = n.initializer ? expression(n.initializer, f) : syntheticUndefined(n);
-        f.env.set(binding.id, valueOf(initializer)); return { ...n, binding, initializer };
+        f.env.set(binding.id, valueOf(initializer)); record(binding, valueOf(initializer)); return { ...n, binding, initializer };
       }
       case 'expression': return { ...n, expression: expression(n.expression, f) };
       case 'block': return { ...n, body: statements(n.body, f, loop) };
       case 'return': {
         const value = n.value ? expression(n.value, f) : syntheticUndefined(n);
-        if (hasReference(value.types)) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Returning Object/Array values from specialized functions is deferred.', n.span);
-        f.returns.push(value.types); f.reachable = false; return { ...n, value };
+        f.returns.push(valueOf(value)); f.reachable = false; return { ...n, value };
       }
       case 'break': {
         if (!loop) return fail('E_BREAK_CONTEXT', 'break outside a loop is unsupported.', n.span);
@@ -328,8 +439,8 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
       case 'if': {
         const condition = expression(n.condition, f);
-        const a: Flow = { env: cloneEnv(f.env), heap: cloneHeap(f.heap), reachable: true, returns: [], loopDepth: f.loopDepth };
-        const b: Flow = { env: cloneEnv(f.env), heap: cloneHeap(f.heap), reachable: true, returns: [], loopDepth: f.loopDepth };
+        const a: Flow = { env: cloneEnv(f.env), heap: cloneHeap(f.heap), reachable: true, returns: [], loopDepth: f.loopDepth, owner: f.owner };
+        const b: Flow = { env: cloneEnv(f.env), heap: cloneHeap(f.heap), reachable: true, returns: [], loopDepth: f.loopDepth, owner: f.owner };
         const then = statement(n.then, a, loop) ?? emptyStatement(n.then);
         const otherwise = n.otherwise && (statement(n.otherwise, b, loop) ?? emptyStatement(n.otherwise));
         const live = [a, b].filter(x => x.reachable);
@@ -344,7 +455,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         const entry = stateOf(f);
         let head = stateOf(f);
         const run = (state: State) => {
-          const iter: Flow = { env: cloneEnv(state.env), heap: cloneHeap(state.heap), reachable: true, returns: [], loopDepth: f.loopDepth + 1 };
+          const iter: Flow = { env: cloneEnv(state.env), heap: cloneHeap(state.heap), reachable: true, returns: [], loopDepth: f.loopDepth + 1, owner: f.owner };
           const condition = expression(n.condition, iter), conditionExit = stateOf(iter);
           const control: LoopControl = { breaks: [], continues: [] };
           const body = statement(n.body, iter, control) ?? emptyStatement(n.body);
@@ -365,17 +476,17 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       case 'doWhile': {
         const entry=stateOf(f); let head=stateOf(f);
         const run=(state:State)=>{
-          const iter:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+          const iter:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
           const control:LoopControl={breaks:[],continues:[]};
           const body=statement(n.body,iter,control)??emptyStatement(n.body);
           const backs=[...(iter.reachable?[stateOf(iter)]:[]),...control.continues];
           let condition:SE, conditionExit:State|undefined, back:State|undefined;
           if(backs.length){
             const testState=joinStates(state,backs);
-            const test:Flow={env:cloneEnv(testState.env),heap:cloneHeap(testState.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+            const test:Flow={env:cloneEnv(testState.env),heap:cloneHeap(testState.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
             condition=expression(n.condition,test); conditionExit=stateOf(test); back=stateOf(test);
           } else {
-            const unreachable:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+            const unreachable:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
             condition=expression(n.condition,unreachable);
           }
           return {condition,body,conditionExit,back,breaks:control.breaks,returns:iter.returns};
@@ -400,7 +511,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         }
         const entry=stateOf(f);let head=stateOf(f);
         const run=(state:State)=>{
-          const iter:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+          const iter:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
           let condition:SE|undefined,conditionExit:State|undefined;
           if(n.condition){condition=expression(n.condition,iter);conditionExit=stateOf(iter)}
           const control:LoopControl={breaks:[],continues:[]};
@@ -409,11 +520,11 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
           let update:SE|undefined,back:State|undefined;
           if(backs.length){
             const updateState=joinStates(state,backs);
-            const updateFlow:Flow={env:cloneEnv(updateState.env),heap:cloneHeap(updateState.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+            const updateFlow:Flow={env:cloneEnv(updateState.env),heap:cloneHeap(updateState.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
             if(n.update)update=expression(n.update,updateFlow);
             back=stateOf(updateFlow);
           }else if(n.update){
-            const unreachable:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
+            const unreachable:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1,owner:f.owner};
             update=expression(n.update,unreachable);
           }
           return {condition,conditionExit,body,update,back,breaks:control.breaks,returns:iter.returns};
@@ -431,5 +542,6 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     }
   }
 
-  return { body: statements(program.body, { env: new Map(), heap: new Map(), reachable: true, returns: [], loopDepth: 0 }), functions: instances };
+  return { body: statements(program.body, { env: new Map(), heap: new Map(), reachable: true, returns: [], loopDepth: 0, owner: 0 }),
+    functions: instances, templates: bindings.functions, captures: bindings.captures };
 }

@@ -2,6 +2,10 @@ import type { Span } from '../diagnostics/index.js';
 export interface Node { id: number; span: Span }
 export type LiteralValue = number | string | boolean | null;
 export interface ObjectProperty { key: string; value: Expr }
+export interface Parameter extends Node { name: string }
+export interface FunctionExpression extends Node {
+  kind: 'functionExpr'; params: Parameter[]; body: Statement & { kind: 'block' };
+}
 export type VariableStatement = Statement & { kind: 'variable' };
 export type ForInitializer = Node & (
   | { kind: 'variables'; declarations: VariableStatement[] }
@@ -18,9 +22,9 @@ export type Expr = Node & (
   | { kind: 'member'; object: Expr; property: string }
   | { kind: 'object'; properties: ObjectProperty[] }
   | { kind: 'array'; elements: (Expr | null)[] }
+  | FunctionExpression
   | { kind: 'call'; callee: Expr; args: Expr[] }
 );
-export interface Parameter extends Node { name: string }
 export type Statement = Node & (
   | { kind: 'variable'; mode: 'const' | 'let'; name: string; initializer?: Expr }
   | { kind: 'expression'; expression: Expr }
@@ -36,4 +40,5 @@ export type Statement = Node & (
   | { kind: 'empty' }
 );
 export type FunctionDeclaration = Statement & { kind: 'function' };
+export type FunctionNode = FunctionDeclaration | FunctionExpression;
 export interface Program { file: string; body: Statement[] }

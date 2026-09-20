@@ -1,6 +1,6 @@
 import type { CsExpr, CsProgram, CsStatement } from '../../ir/csharp.js';
 const ident = (s: string): string => {
-  if (!/^(?:b|F)\d+$/.test(s)) throw new Error(`Invalid generated identifier ${s}`);
+  if (!/^F\d+$/.test(s)) throw new Error(`Invalid generated identifier ${s}`);
   return s;
 };
 function quote(value: string): string {
@@ -21,7 +21,7 @@ const calls = new Set(['JsValue.IsTruthy', 'JsOperators.Add', 'JsOperators.Stric
   'JsOperators.LessThan', 'JsOperators.LessThanOrEqual', 'JsOperators.GreaterThan', 'JsOperators.GreaterThanOrEqual',
   'JsCoercion.ToNumberPrimitive', 'JsCoercion.ToInt32Primitive', 'JsGlobals.IsFinitePrimitive', 'JsGlobals.IsNaNPrimitive',
   'JsGlobals.ParseFloatPrimitive', 'JsGlobals.ParseIntPrimitive', 'JsNumber.ParseFloatPrimitive', 'JsNumber.ParseIntPrimitive',
-  'double.IsFinite', 'double.IsNaN', 'JsReference.Assign',
+  'double.IsFinite', 'double.IsNaN', 'JsEnvironment.Read', 'JsReference.Assign',
   'JsReference.AddAssign', 'JsReference.SubtractAssignNumber', 'JsReference.MultiplyAssignNumber',
   'JsReference.DivideAssignNumber', 'JsReference.RemainderAssignNumber', 'JsReference.PrefixIncrementNumber',
   'JsReference.PostfixIncrementNumber', 'JsReference.PrefixDecrementNumber', 'JsReference.PostfixDecrementNumber',
@@ -29,13 +29,20 @@ const calls = new Set(['JsValue.IsTruthy', 'JsOperators.Add', 'JsOperators.Stric
   'JsObject.SetProperty', 'JsObject.HasOwn', 'JsArray.Create', 'JsArray.DefineElement', 'JsArray.Length', 'JsArray.Push']);
 function expr(e: CsExpr): string {
   switch (e.kind) {
-    case 'literal': return e.repr === 'number' ? number(e.value) : e.repr === 'string' ? quote(e.value) : String(e.value);
-    case 'read': return ident(e.name);
-    case 'ref': return `ref ${ident(e.name)}`;
+    case 'literal':
+      return e.repr === 'number' ? number(e.value) : e.repr === 'integer' ? String(e.value)
+        : e.repr === 'string' ? quote(e.value) : String(e.value);
+    case 'environment': return 'e';
     case 'member': return e.name;
     case 'call':
       if (!calls.has(e.target)) ident(e.target);
       return `${e.target}(${e.args.map(expr).join(', ')})`;
+    case 'functionCreate': return `JsFunction.Create(${e.templateId}, e)`;
+    case 'functionCall': {
+      const ids = `new int[] { ${e.params.join(', ')} }`;
+      const args = e.args.length ? `, ${e.args.map(expr).join(', ')}` : '';
+      return `JsFunction.CallKnown(${expr(e.callee)}, ${e.templateId}, ${ident(e.body)}, ${ids}${args})`;
+    }
     case 'box': {
       const method = { number: 'FromNumber', string: 'FromString', boolean: 'FromBoolean' }[e.value.repr as 'number' | 'string' | 'boolean'];
       if (!method) throw new Error('Invalid boxing IR');
@@ -55,7 +62,7 @@ export function emitCSharp(program: CsProgram): string {
   function block(s: CsStatement, d: number): void { line(d, '{'); body(s.kind === 'block' ? s.body : [s], d + 1); line(d, '}'); }
   function statement(s: CsStatement, d: number): void {
     switch (s.kind) {
-      case 'variable': line(d, `JsValue ${ident(s.name)} = ${expr(s.initializer)};`); return;
+      case 'binding': line(d, `_ = e.Declare(${s.id}, ${expr(s.initializer)});`); return;
       case 'expression': line(d, `_ = ${expr(s.expression)};`); return;
       case 'return': line(d, `return ${expr(s.value)};`); return;
       case 'break': line(d, 'break;'); return;
@@ -71,9 +78,9 @@ export function emitCSharp(program: CsProgram): string {
         block(s.body, d); return;
     }
   }
-  line(1, 'private static void Main()'); line(1, '{'); body(program.body, 2); line(1, '}');
+  line(1, 'private static void Main()'); line(1, '{'); line(2, 'var e = JsEnvironment.CreateRoot();'); body(program.body, 2); line(1, '}');
   for (const fn of program.functions) {
-    line(0, ''); line(1, `private static JsValue ${ident(fn.name)}(${fn.params.map(p => `JsValue ${ident(p)}`).join(', ')})`);
+    line(0, ''); line(1, `private static JsValue ${ident(fn.name)}(JsEnvironment e)`);
     line(1, '{'); body(fn.body, 2); line(1, '}');
   }
   lines.push('}', ''); return lines.join('\n');

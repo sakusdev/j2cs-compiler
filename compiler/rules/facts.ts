@@ -15,15 +15,19 @@ export function programFacts(): Facts {
 function bindingFacts(f: Facts, b: Binding): void {
   f.prove('binding.kind', b.kind, `Resolved binding #${b.id} (${b.name})`)
     .prove('binding.origin', b.kind === 'intrinsic' ? 'intrinsic' : 'declaration', 'Lexical binder provenance')
-    .prove('binding.mutable', ['let', 'parameter'].includes(b.kind), 'Binder rejects writes to other binding kinds');
+    .prove('binding.mutable', ['let', 'parameter'].includes(b.kind), 'Binder rejects writes to other binding kinds')
+    .prove('binding.lexical', ['const', 'let', 'parameter'].includes(b.kind), 'Resolved lexical/parameter binding class')
+    .prove('binding.perIteration', b.perIteration === true, 'Binder marks loop lexical bindings requiring fresh iteration cells');
   if (b.kind === 'intrinsic') f.prove('binding.globalProperty', b.name, 'Unshadowed intrinsic resolution')
     .prove('binding.intrinsic', `%${b.name}%`, 'Intrinsic binding identity');
 }
-function functionFacts(f: Facts): void {
-  f.prove('function.kind', 'ordinary', 'Parser admits only ordinary declarations')
-    .prove('function.scope', 'module', 'Binder admits only top-level module-local functions')
-    .prove('function.observes', [], 'Syntax/binding checks reject this, arguments, new.target, identity, properties, construction and escape')
-    .prove('function.parameters', 'simple', 'Parser rejects default/rest/optional/destructured parameters');
+function functionFacts(f: Facts, b?: Binding): void {
+  f.prove('function.kind', 'ordinary', 'Parser admits ordinary function declarations/expressions only')
+    .prove('function.scope', b?.owner === 0 ? 'module' : 'function', 'Resolved lexical declaration owner')
+    .prove('function.observes', b?.observedAsValue ? ['identity'] : [],
+      'this/arguments/new.target/properties/construction are rejected; identity is tracked explicitly')
+    .prove('function.parameters', 'simple', 'Parser rejects default/rest/optional/destructured parameters')
+    .prove('function.formalsKnown', true, 'Simple parameter list is fully resolved by the binder');
 }
 function receiverFacts(f: Facts, e: SemanticExpr): void {
   if (e.kind !== 'member' && !(e.kind === 'call' && (e.target === 'array.push' || e.target === 'object.hasOwn'))) return;
@@ -77,8 +81,10 @@ export function expressionFacts(e: SemanticExpr): Facts {
     else if (e.target === 'object.hasOwn') f.prove('member.integrity', 'pristine', 'Direct unshadowed Object.hasOwn with static key')
       .prove('object.ownPropertyTest', true, 'JsObject/JsArray explicitly preserve own-property presence separately from undefined');
     else if (typeof e.target === 'number') {
-      functionFacts(f); f.prove('call.argumentCount', e.args.length, 'AST argument count')
-        .prove('function.parameterCount', e.arity, 'Resolved declaration signature');
+      functionFacts(f, e.binding); f.prove('call.argumentCount', e.args.length, 'AST argument count')
+        .prove('function.parameterCount', e.arity, 'Resolved declaration signature')
+        .prove('call.fewerThanFormals', e.args.length < e.arity, 'Resolved source argument count vs formal count')
+        .prove('call.moreThanFormals', e.args.length > e.arity, 'Resolved source argument count vs formal count');
     } else {
       f.prove('call.argumentCount', e.args.length, 'AST intrinsic argument count');
       const argument = e.args[0];
@@ -98,5 +104,9 @@ export function expressionFacts(e: SemanticExpr): Facts {
   return f;
 }
 export function declarationFacts(fn: SemanticFunction): Facts {
-  const f = programFacts(); functionFacts(f); bindingFacts(f, fn.binding); return f;
+  const f = programFacts(); functionFacts(f, fn.binding); bindingFacts(f, fn.binding); return f;
+}
+
+export function captureFacts(binding: Binding): Facts {
+  const f = programFacts(); bindingFacts(f, binding); return f;
 }
