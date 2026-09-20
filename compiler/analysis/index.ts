@@ -260,11 +260,12 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
       case 'call': {
         if (n.callee.kind === 'member') {
-          if (n.callee.object.kind === 'identifier') {
-            const binding = bindings.references.get(n.callee.object.id)!;
-            if (n.callee.object.name === 'console' && (binding?.kind !== 'intrinsic' || binding.name !== 'console'))
+          const callee = n.callee;
+          if (callee.object.kind === 'identifier') {
+            const binding = bindings.references.get(callee.object.id)!;
+            if (callee.object.name === 'console' && (binding?.kind !== 'intrinsic' || binding.name !== 'console'))
               fail('E_INTRINSIC_SHADOWED', 'console.log does not resolve to the pristine Node console intrinsic.', n.span);
-            if (binding?.kind === 'intrinsic' && binding.name === 'console' && n.callee.property === 'log') {
+            if (binding?.kind === 'intrinsic' && binding.name === 'console' && callee.property === 'log') {
               const args = n.args.map(a => expression(a, f));
               if (args.some(a => hasReference(a.types)))
                 fail('E_CONSOLE_OBJECT', 'Object/Array console inspection is outside the primitive console host contract.', n.span);
@@ -275,7 +276,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
               }
               return { ...n, kind: 'call', target: 'console', binding, args, arity: args.length, types: ['Undefined'] };
             }
-            if (binding?.kind === 'intrinsic' && binding.name === 'Object' && n.callee.property === 'hasOwn') {
+            if (binding?.kind === 'intrinsic' && binding.name === 'Object' && callee.property === 'hasOwn') {
               if (n.args.length !== 2) fail('E_ARITY', 'Object.hasOwn is supported only with exactly two arguments.', n.span);
               const receiver = expression(n.args[0]!, f); requireReference(receiver, f, 'Object.hasOwn');
               const key = n.args[1]!;
@@ -285,15 +286,15 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
                 property: typeof key.value === 'number' ? String(key.value) : key.value, args: [], arity: 2, types: ['Boolean'] };
             }
           }
-          const receiver = expression(n.callee.object, f);
+          const receiver = expression(callee.object, f);
           if (exactly(receiver.types, 'Array')) {
-            const target = arrayBuiltinTargets[n.callee.property];
-            if (!target) fail('E_INDIRECT_CALL', `Array member call '.${n.callee.property}' is not a reviewed builtin.`, n.span);
-            const refs = requireReference(receiver, f, `Array.prototype.${n.callee.property}`);
+            const target = arrayBuiltinTargets[callee.property];
+            if (!target) fail('E_INDIRECT_CALL', `Array member call '.${callee.property}' is not a reviewed builtin.`, n.span);
+            const refs = requireReference(receiver, f, `Array.prototype.${callee.property}`);
             if (refs.some(r => f.heap.get(r)!.kind !== 'Array'))
-              fail('E_ARRAY_RECEIVER', `${n.callee.property} requires a proven builtin Array receiver.`, n.span);
-            if (refs.some(r => f.heap.get(r)!.properties.has(n.callee.property)))
-              fail('E_ARRAY_METHOD_OVERRIDDEN', `An own ${n.callee.property} property makes builtin Array.prototype resolution unproven.`, n.span);
+              fail('E_ARRAY_RECEIVER', `${callee.property} requires a proven builtin Array receiver.`, n.span);
+            if (refs.some(r => f.heap.get(r)!.properties.has(callee.property)))
+              fail('E_ARRAY_METHOD_OVERRIDDEN', `An own ${callee.property} property makes builtin Array.prototype resolution unproven.`, n.span);
             const args = n.args.map(a => expression(a, f));
 
             if (target === 'array.push') {
@@ -314,8 +315,8 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
             }
             if (target === 'array.includes' || target === 'array.indexOf') {
               if (args.length < 1 || args.length > 2)
-                fail('E_ARITY', `Array.prototype.${n.callee.property} is currently supported with one or two arguments.`, n.span);
-              if (args[1]) requirePrimitiveCoercion(args[1], `Array.prototype.${n.callee.property} fromIndex`);
+                fail('E_ARITY', `Array.prototype.${callee.property} is currently supported with one or two arguments.`, n.span);
+              if (args[1]) requirePrimitiveCoercion(args[1], `Array.prototype.${callee.property} fromIndex`);
               return { ...n, kind: 'call', target, receiver, args, arity: args.length,
                 types: target === 'array.includes' ? ['Boolean'] : ['Number'] };
             }
@@ -338,23 +339,23 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
             }
           }
           if (exactly(receiver.types, 'String')) {
-            const target = stringBuiltinTargets[n.callee.property];
-            if (!target) fail('E_INDIRECT_CALL', `String member call '.${n.callee.property}' is not a reviewed builtin.`, n.span);
+            const target = stringBuiltinTargets[callee.property];
+            if (!target) fail('E_INDIRECT_CALL', `String member call '.${callee.property}' is not a reviewed builtin.`, n.span);
             const args = n.args.map(a => expression(a, f));
-            for (const arg of args) requirePrimitiveCoercion(arg, `String.prototype.${n.callee.property} argument`);
+            for (const arg of args) requirePrimitiveCoercion(arg, `String.prototype.${callee.property} argument`);
             const range = target === 'string.includes' || target === 'string.indexOf' || target === 'string.slice' || target === 'string.substring';
             const exactOne = target === 'string.at' || target === 'string.charAt';
             if (exactOne && args.length !== 1)
-              fail('E_ARITY', `String.prototype.${n.callee.property} is currently supported with exactly one argument.`, n.span);
+              fail('E_ARITY', `String.prototype.${callee.property} is currently supported with exactly one argument.`, n.span);
             if (range && (args.length < 1 || args.length > 2))
-              fail('E_ARITY', `String.prototype.${n.callee.property} is currently supported with one or two arguments.`, n.span);
+              fail('E_ARITY', `String.prototype.${callee.property} is currently supported with one or two arguments.`, n.span);
             const types: TypeSet =
               target === 'string.at' ? ['String', 'Undefined'] :
               target === 'string.includes' ? ['Boolean'] :
               target === 'string.indexOf' ? ['Number'] : ['String'];
             return { ...n, kind: 'call', target, receiver, args, arity: args.length, types };
           }
-          fail('E_INDIRECT_CALL', `Member call '.${n.callee.property}' is not a proven supported intrinsic.`, n.span);
+          fail('E_INDIRECT_CALL', `Member call '.${callee.property}' is not a proven supported intrinsic.`, n.span);
         }
         if (n.callee.kind !== 'identifier') fail('E_INDIRECT_CALL', 'Only statically resolved direct calls are supported.', n.span);
         const binding = bindings.references.get(n.callee.id)!;
