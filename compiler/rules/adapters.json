@@ -734,6 +734,118 @@
           "equals": "primitive"
         }
       ]
+    },
+    {
+      "ruleId": "control.throw.value",
+      "sha256": "548b063a27eac6000f30c1b8c7129d9803b99d0dc7e5d2c3dd634f8044dc0820",
+      "selector": {
+        "kind": "throw.value"
+      },
+      "lowering": "completion.throw"
+    },
+    {
+      "ruleId": "control.throw.expression-abrupt",
+      "sha256": "bf6206a699e322d1cf42f7295fb85dfb8c2dd55c272a53ee1de8f5525e613f34",
+      "selector": {
+        "kind": "throw.expression"
+      },
+      "lowering": "completion.throw-expression"
+    },
+    {
+      "ruleId": "control.try.catch-thrown-value",
+      "sha256": "144b327a22cb0a5c02e8d8e9d3ab2dc84808638e3037c373b79c2de6daf7dec5",
+      "selector": {
+        "kind": "try.catch.binding"
+      },
+      "lowering": "completion.catch"
+    },
+    {
+      "ruleId": "control.try.catch-binding-scope",
+      "sha256": "105152a0cdeab80807158a69f153a174a7e1b9130bf1c7e8a842b4a04f3920e0",
+      "selector": {
+        "kind": "try.catch.scope"
+      },
+      "lowering": "completion.catch-scope"
+    },
+    {
+      "ruleId": "control.try.catch-omitted-binding",
+      "sha256": "ace13fc59e7b47e3449d8f5f91cbcd0057ceda7ef9afba54a9d33214a77c7d72",
+      "selector": {
+        "kind": "try.catch.omitted"
+      },
+      "lowering": "completion.catch"
+    },
+    {
+      "ruleId": "control.try.catch-only-throw-completion",
+      "sha256": "fd1afebf46c548e3256a658d9490ceacb896dc15107996068c06d4f5831967ad",
+      "selector": {
+        "kind": "try.catch.abrupt"
+      },
+      "lowering": "completion.catch-only-throw"
+    },
+    {
+      "ruleId": "control.try.catch-finally-order",
+      "sha256": "0280a475b92682539ee1b35fa2a42b2065eef7b8908ed633872f0b497ad347d1",
+      "selector": {
+        "kind": "try.catch-finally"
+      },
+      "lowering": "completion.try-catch-finally"
+    },
+    {
+      "ruleId": "control.try.finally-runs-on-return",
+      "sha256": "02df11d6a0d794112e36132fccbb044100b312e5bff055dc9de8131036a82b83",
+      "selector": {
+        "kind": "try.finally.return"
+      },
+      "lowering": "completion.try-finally"
+    },
+    {
+      "ruleId": "control.try.finally-runs-on-break-continue",
+      "sha256": "dfbfc98157909ce6c1bb4e7428bc761c197d57887786e74027b5e85789516ac3",
+      "selector": {
+        "kind": "try.finally.loop"
+      },
+      "lowering": "completion.try-finally"
+    },
+    {
+      "ruleId": "control.try.finally-normal-preserves-completion",
+      "sha256": "ab28fe51ccd1f750a1564a874a78c4378c5474523eae19055c22377d2a85db77",
+      "selector": {
+        "kind": "try.finally"
+      },
+      "lowering": "completion.try-finally-native"
+    },
+    {
+      "ruleId": "control.try.finally-abrupt-overrides",
+      "sha256": "944d5dfe6740ec7540fbac5c421fe9d87694a8e01601c80eca4d99329d221b28",
+      "selector": {
+        "kind": "try.finally"
+      },
+      "lowering": "completion.try-finally-signal"
+    },
+    {
+      "ruleId": "control.try.nested-finally-order",
+      "sha256": "033cf97ec6cbae2fd96ce286a11aee8c71aec3bd12651c2f7fc8af2cdbf93229",
+      "selector": {
+        "kind": "try.finally.nested"
+      },
+      "lowering": "completion.try-finally"
+    },
+    {
+      "ruleId": "control.abrupt.completion-kinds",
+      "sha256": "a744c5cd92791c6fb53cb93861af17f709feba389f8c7a1c3685334d7174e95f",
+      "selector": {
+        "kind": "completion"
+      },
+      "lowering": "completion.signal"
+    },
+    {
+      "ruleId": "control.abrupt.sync-function-propagation",
+      "sha256": "8e8653fd5bfed087477dd14bde1f46b99341a4405b40cd37e0bf9d757f5b45b5",
+      "selector": {
+        "kind": "call.function.throw"
+      },
+      "lowering": "completion.call-throw"
     }
   ]
 }
