@@ -253,7 +253,12 @@ test('Node vs C#: storage/profile/session runtime contract', { timeout: 90_000 }
     const node = await run(process.execPath, ['input.cjs'], dir);
     const csharp = await run(process.env.DOTNET ?? 'dotnet', [path.join(dir, 'bin/Debug/net8.0/J2cs.StorageProfileDiff.dll')], dir);
     assert.equal(node.exit, 0);
-    assert.deepEqual(csharp, node, 'Storage/profile runtime behavior differs from the Node oracle');
+    const normalized = (execution: typeof node) => ({
+      ...execution,
+      stdout: execution.stdout.replaceAll('\r\n', '\n'),
+      stderr: execution.stderr.replaceAll('\r\n', '\n'),
+    });
+    assert.deepEqual(normalized(csharp), normalized(node), 'Storage/profile runtime behavior differs from the Node oracle');
   } catch (error) {
     throw new Error(`Storage/profile differential failed; artifacts: ${dir}: ${String(error)}`, { cause: error });
   } finally {
