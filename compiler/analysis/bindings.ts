@@ -13,6 +13,7 @@ const callableIntrinsics = new Set(['isFinite', 'isNaN', 'parseFloat', 'parseInt
 export function resolveBindings(program: Program): Bindings {
   let nextId = 0;
   const references = new Map<number, Binding>(), declarations = new Map<number, Binding>(), functions: Binding[] = [];
+  const invokedFunctions = new Set<number>(), thisUses = new Map<number, Expr & { kind: 'thisValue' }>();
   const global: Scope = { owner: -1, names: new Map() };
   for (const name of intrinsics) global.names.set(name, { id: nextId++, name, kind: 'intrinsic', owner: -1 });
   function declare(scope: Scope, n: Node, name: string, kind: Binding['kind'], fn?: FunctionDeclaration): Binding {
@@ -36,12 +37,20 @@ export function resolveBindings(program: Program): Bindings {
     if (b.kind !== 'let' && b.kind !== 'parameter') fail('E_IMMUTABLE_WRITE', `Assignment to '${b.name}' is unsupported (${b.kind}).`, span);
     return b;
   }
-  function expr(n: Expr, s: Scope, use: 'value' | 'callee' | 'receiver' = 'value'): void {
+  function expr(n: Expr, s: Scope, use: 'value' | 'callee' | 'receiver' | 'construct' = 'value'): void {
     switch (n.kind) {
       case 'literal': return;
+      case 'thisValue':
+        if (s.owner === 0) fail('E_THIS_CONTEXT', 'Top-level this is outside the closed module profile.', n.span);
+        thisUses.set(s.owner, n);
+        return;
+      case 'newTarget':
+        if (s.owner === 0) fail('E_NEW_TARGET_CONTEXT', 'new.target is only valid inside a function.', n.span);
+        return;
       case 'identifier': {
         const b = resolve(n, s);
-        if (b.kind === 'function' && use !== 'callee') fail('E_FUNCTION_VALUE', 'Function identity/escape is unsupported; use a direct call.', n.span);
+        if (b.kind === 'function' && use !== 'callee' && use !== 'construct')
+          fail('E_FUNCTION_VALUE', 'Function identity/escape is unsupported; use a direct call or construction.', n.span);
         if (b.kind === 'intrinsic' && ['console', 'Object'].includes(b.name) && use !== 'receiver')
           fail('E_INTRINSIC_ESCAPE', `${b.name} may only be used as the direct receiver of a supported intrinsic call.`, n.span);
         if (b.kind === 'intrinsic' && callableIntrinsics.has(b.name) && use !== 'callee')
@@ -66,7 +75,26 @@ export function resolveBindings(program: Program): Bindings {
       case 'compound': writable(n.target, s, n.span); expr(n.value, s); return;
       case 'update': writable(n.target, s, n.span); return;
       case 'member': expr(n.object, s, 'receiver'); return;
-      case 'call': expr(n.callee, s, 'callee'); n.args.forEach(a => expr(a, s)); return;
+      case 'call': {
+        expr(n.callee, s, 'callee');
+        if (n.callee.kind === 'identifier') {
+          const target = references.get(n.callee.id);
+          if (target?.kind === 'function') invokedFunctions.add(target.id);
+        }
+        n.args.forEach(a => expr(a, s));
+        return;
+      }
+      case 'construct': {
+        if (n.callee.kind !== 'identifier')
+          fail('E_CONSTRUCT_TARGET', 'Only a statically resolved ordinary function constructor is supported.', n.callee.span);
+        expr(n.callee, s, 'construct');
+        const target = references.get(n.callee.id)!;
+        if (target.kind !== 'function')
+          fail('E_CONSTRUCT_TARGET', `Construction target '${n.callee.name}' is not a proven ordinary function.`, n.callee.span);
+        invokedFunctions.add(target.id);
+        n.args.forEach(a => expr(a, s));
+        return;
+      }
     }
   }
   function body(nodes: Statement[], s: Scope, top = false, loopDepth = 0): void {
@@ -113,5 +141,10 @@ export function resolveBindings(program: Program): Bindings {
     }
   }
   body(program.body, { parent: global, owner: 0, names: new Map() }, true, 0);
+  for (const [owner, use] of thisUses) {
+    const binding = functions.find(candidate => candidate.function !== undefined && candidate.function.id + 1 === owner);
+    if (binding && !invokedFunctions.has(binding.id))
+      fail('E_UNSUPPORTED_SYNTAX', 'Function this requires a proven direct call or construction in the closed profile.', use.span);
+  }
   return { references, declarations, functions };
 }

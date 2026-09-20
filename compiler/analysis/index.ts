@@ -10,6 +10,12 @@ type Environment = Map<number, ValueInfo>;
 interface Flow { env: Environment; heap: Map<number, Shape>; reachable: boolean; returns: TypeSet[]; loopDepth: number }
 interface State { env: Environment; heap: Map<number, Shape> }
 interface LoopControl { breaks: State[]; continues: State[] }
+interface ConstructorOutcome { returned: ValueInfo; heap: Map<number, Shape> }
+interface InvocationContext {
+  mode: 'call' | 'construct'; binding: Binding; instanceId: number; observes: Set<string>;
+  receiver?: ValueInfo; receiverRef?: number; outcomes?: ConstructorOutcome[];
+}
+interface InstanceSummary { instance: SemanticFunction; constructTypes?: TypeSet; constructShape?: Shape }
 const MAX_LOOP_FIXPOINT = 16;
 const UNDEFINED: ValueInfo = { types: ['Undefined'] };
 const objectPrototypeKeys = new Set(['__proto__', 'constructor', 'hasOwnProperty', 'isPrototypeOf',
@@ -21,7 +27,8 @@ const arrayPrototypeKeys = new Set(['at', 'concat', 'copyWithin', 'entries', 'ev
   'splice', 'toLocaleString', 'toReversed', 'toSorted', 'toSpliced', 'toString', 'unshift', 'values', 'with']);
 
 export function analyze(program: Program, bindings: Bindings): SemanticProgram {
-  const instances: SemanticFunction[] = [], cache = new Map<string, SemanticFunction>(), active = new Set<number>();
+  const instances: SemanticFunction[] = [], cache = new Map<string, InstanceSummary>(), active = new Set<number>();
+  const invocations: InvocationContext[] = [], constructedBindings = new Set<number>();
   let nextInstance = 0;
   const syntheticUndefined = (n: Node): SE => ({ ...n, kind: 'literal', value: undefined, types: ['Undefined'] });
   const valueOf = (e: SE): ValueInfo => ({ types: e.types, ...(e.refs ? { refs: e.refs } : {}) });
@@ -37,9 +44,49 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
   function cloneEnv(env: Environment): Environment {
     return new Map([...env].map(([id, v]) => [id, cloneValue(v)]));
   }
+  function cloneShape(s: Shape): Shape {
+    return { kind: s.kind, length: s.length,
+      properties: new Map([...s.properties].map(([k, v]) => [k, cloneValue(v)])) };
+  }
   function cloneHeap(heap: Map<number, Shape>): Map<number, Shape> {
-    return new Map([...heap].map(([id, s]) => [id, { kind: s.kind, length: s.length,
-      properties: new Map([...s.properties].map(([k, v]) => [k, cloneValue(v)])) }]));
+    return new Map([...heap].map(([id, shape]) => [id, cloneShape(shape)]));
+  }
+  function currentInvocation(): InvocationContext | undefined { return invocations[invocations.length - 1]; }
+  function summarizeConstruction(context: InvocationContext, span: Node['span']): { types: TypeSet; shape: Shape } {
+    const outcomes = context.outcomes ?? [];
+    const receiverRef = context.receiverRef;
+    if (receiverRef === undefined || !outcomes.length)
+      fail('E_CONSTRUCTOR_ANALYSIS', 'Constructor completion summary is unavailable.', span);
+    const shapes: Shape[] = [], resultTypes: TypeSet[] = [];
+    for (const outcome of outcomes) {
+      if (outcome.returned.types.some(type => type !== 'Object' && type !== 'Array')) {
+        const receiver = outcome.heap.get(receiverRef);
+        if (!receiver) fail('E_CONSTRUCTOR_ANALYSIS', 'Constructor receiver escaped analyzable heap state.', span);
+        shapes.push(receiver); resultTypes.push(['Object']);
+      }
+      if (outcome.returned.types.some(type => type === 'Object' || type === 'Array')) {
+        if (!outcome.returned.refs?.length)
+          fail('E_CONSTRUCTOR_RETURN_OBJECT', 'Constructor object returns require compiler-owned identity.', span);
+        for (const ref of outcome.returned.refs) {
+          const returned = outcome.heap.get(ref);
+          if (!returned) fail('E_CONSTRUCTOR_RETURN_OBJECT', 'Constructor return identity escaped analyzable heap state.', span);
+          shapes.push(returned); resultTypes.push([returned.kind]);
+        }
+      }
+    }
+    if (!shapes.length) fail('E_CONSTRUCTOR_ANALYSIS', 'Constructor has no analyzable completion.', span);
+    return { types: union(...resultTypes), shape: mergeShapes(shapes) };
+  }
+  function mergeShapes(shapes: Shape[]): Shape {
+    if (!shapes.length) throw new Error('Cannot merge an empty constructor shape set.');
+    const properties = new Map<string, ValueInfo>();
+    const keys = new Set<string>(shapes.flatMap(shape => [...shape.properties.keys()]));
+    for (const key of keys)
+      properties.set(key, unionValue(...shapes.map(shape => shape.properties.get(key) ?? UNDEFINED)));
+    const allArrays = shapes.every(shape => shape.kind === 'Array');
+    const lengths = shapes.map(shape => shape.length);
+    const length = allArrays && lengths.every(x => x === lengths[0]) ? lengths[0] : undefined;
+    return { kind: allArrays ? 'Array' : 'Object', length, properties };
   }
   function stateOf(f: Flow): State { return { env: cloneEnv(f.env), heap: cloneHeap(f.heap) }; }
   function joinEnv(template: Environment, paths: Environment[]): Environment {
@@ -142,31 +189,61 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       }
     }
   }
-  function instantiate(b: Binding, args: SE[], callNode: Node): SemanticFunction {
+  function instantiate(b: Binding, args: SE[], callNode: Node, mode: 'call' | 'construct' = 'call'): InstanceSummary {
     const fn = b.function!;
-    if (args.length !== fn.params.length) fail('E_ARITY', 'Only exact-arity direct function calls are supported.', callNode.span);
+    if (args.length !== fn.params.length) fail('E_ARITY', 'Only exact-arity direct function calls/constructions are supported.', callNode.span);
     if (args.some(a => hasReference(a.types)))
       fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object/Array arguments require alias/effect summaries and are deferred.', callNode.span);
     if (active.has(b.id)) fail('E_RECURSION', 'Recursive call graphs require a summary fixed point; unsupported in this MVP.', callNode.span);
-    const key = `${b.id}:${args.map(a => a.types.join('|')).join(',')}`;
+    const key = `${mode}:${b.id}:${args.map(a => a.types.join('|')).join(',')}`;
     const found = cache.get(key); if (found) return found;
     active.add(b.id);
     const instanceId = nextInstance++, params = fn.params.map(p => bindings.declarations.get(p.id)!);
-    const f: Flow = { env: new Map(params.map((p, i) => [p.id, valueOf(args[i]!)])), heap: new Map(), reachable: true, returns: [], loopDepth: 0 };
-    const body = statements(fn.body.body, f);
-    if (f.reachable) {
-      const value = syntheticUndefined(fn.body);
-      body.push({ ...fn.body, kind: 'return', value }); f.returns.push(value.types);
+    const heap = new Map<number, Shape>();
+    const receiverRef = mode === 'construct' ? -(instanceId + 1) : undefined;
+    if (receiverRef !== undefined) heap.set(receiverRef, { kind: 'Object', properties: new Map() });
+    const context: InvocationContext = {
+      mode, binding: b, instanceId, observes: new Set(),
+      ...(receiverRef !== undefined ? { receiverRef, receiver: { types: ['Object'], refs: [receiverRef] }, outcomes: [] } : {}),
+    };
+    const flow: Flow = {
+      env: new Map(params.map((p, i) => [p.id, valueOf(args[i]!) ])), heap,
+      reachable: true, returns: [], loopDepth: 0,
+    };
+    invocations.push(context);
+    try {
+      const body = statements(fn.body.body, flow);
+      if (flow.reachable) {
+        const value = syntheticUndefined(fn.body);
+        if (mode === 'construct') context.outcomes!.push({ returned: valueOf(value), heap: cloneHeap(flow.heap) });
+        body.push({ ...fn.body, kind: 'return', value }); flow.returns.push(value.types);
+      }
+      const returnTypes = union(...flow.returns);
+      const instance: SemanticFunction = {
+        ...fn, instanceId, binding: b, params, body, returnTypes, mode,
+        observes: [...context.observes].sort(), usedWithNew: false,
+        ...(mode === 'construct' ? {
+          thisSlot: `t${instanceId}`, constructorTemplateId: b.id,
+          mayReturnObject: returnTypes.some(type => type === 'Object' || type === 'Array'),
+        } : {}),
+      };
+      const summary: InstanceSummary = { instance };
+      if (mode === 'construct') {
+        const construction = summarizeConstruction(context, callNode.span);
+        summary.constructTypes = construction.types; summary.constructShape = construction.shape;
+      }
+      instances.push(instance); cache.set(key, summary); return summary;
+    } finally {
+      invocations.pop(); active.delete(b.id);
     }
-    const instance: SemanticFunction = { ...fn, instanceId, binding: b, params, body, returnTypes: union(...f.returns) };
-    instances.push(instance); cache.set(key, instance); active.delete(b.id); return instance;
   }
 
   function expression(n: Expr, f: Flow): SE {
     switch (n.kind) {
       case 'literal': return { ...n, types: literalType(n.value) };
       case 'object': {
-        if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
+        if (active.size && currentInvocation()?.mode !== 'construct')
+          fail('E_OBJECT_FUNCTION_BOUNDARY', 'Object literals inside ordinary calls require per-call heap summaries and are deferred.', n.span);
         if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Object allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
         const ref = n.id, shape: Shape = { kind: 'Object', properties: new Map() };
         f.heap.set(ref, shape);
@@ -176,7 +253,8 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         return { ...n, kind: 'object', properties, types: ['Object'], refs: [ref] };
       }
       case 'array': {
-        if (active.size) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Array literals inside specialized functions require per-call heap summaries and are deferred.', n.span);
+        if (active.size && currentInvocation()?.mode !== 'construct')
+          fail('E_OBJECT_FUNCTION_BOUNDARY', 'Array literals inside ordinary calls require per-call heap summaries and are deferred.', n.span);
         if (f.loopDepth) fail('E_OBJECT_LOOP_ALLOCATION', 'Array allocation inside loops requires per-iteration identity modeling and is deferred.', n.span);
         const ref = n.id, shape: Shape = { kind: 'Array', length: n.elements.length, properties: new Map() };
         f.heap.set(ref, shape);
@@ -185,6 +263,22 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
           const value = expression(e, f); shape.properties.set(String(i), valueOf(value)); return value;
         });
         return { ...n, kind: 'array', elements, types: ['Array'], refs: [ref] };
+      }
+      case 'thisValue': {
+        const context = currentInvocation();
+        if (!context || context.mode !== 'construct' || !context.receiver)
+          fail('E_THIS_CALL_UNSUPPORTED', 'Ordinary-call this binding is owned by the separate this-call lane and remains fail-closed.', n.span);
+        context.observes.add('this');
+        return withValue({ ...n, kind: 'thisValue' as const, slot: `t${context.instanceId}` }, context.receiver);
+      }
+      case 'newTarget': {
+        const context = currentInvocation();
+        if (!context) fail('E_NEW_TARGET_CONTEXT', 'new.target is only available while analyzing a function invocation.', n.span);
+        context.observes.add('new.target');
+        return {
+          ...n, kind: 'newTarget', types: context.mode === 'construct' ? ['Object'] : ['Undefined'],
+          ...(context.mode === 'construct' ? { constructorTemplateId: context.binding.id } : {}),
+        };
       }
       case 'identifier': {
         const binding = bindings.references.get(n.id)!;
@@ -289,8 +383,27 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
             types: target === 'isFinite' || target === 'isNaN' ? ['Boolean'] : ['Number'] };
         }
         if (binding.kind !== 'function') fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
-        const args = n.args.map(a => expression(a, f)), instance = instantiate(binding, args, n);
-        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length, types: instance.returnTypes };
+        const args = n.args.map(a => expression(a, f));
+        const summary = instantiate(binding, args, n, 'call'), instance = summary.instance;
+        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length,
+          observes: instance.observes, types: instance.returnTypes };
+      }
+      case 'construct': {
+        if (n.callee.kind !== 'identifier') fail('E_CONSTRUCT_TARGET', 'Only direct known constructors are supported.', n.callee.span);
+        const binding = bindings.references.get(n.callee.id)!;
+        if (binding.kind !== 'function') fail('E_CONSTRUCT_TARGET', 'Construction requires a proven ordinary function.', n.callee.span);
+        const args = n.args.map(a => expression(a, f));
+        constructedBindings.add(binding.id);
+        const summary = instantiate(binding, args, n, 'construct'), instance = summary.instance;
+        if (!summary.constructShape || !summary.constructTypes)
+          fail('E_CONSTRUCTOR_ANALYSIS', 'Constructor result summary is unavailable.', n.span);
+        const ref = n.id;
+        f.heap.set(ref, cloneShape(summary.constructShape));
+        return {
+          ...n, kind: 'construct', binding, target: instance.instanceId, args, arity: instance.params.length,
+          mayReturnObject: instance.mayReturnObject === true, observes: instance.observes,
+          types: summary.constructTypes, refs: [ref],
+        };
       }
     }
   }
@@ -315,7 +428,12 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
       case 'block': return { ...n, body: statements(n.body, f, loop) };
       case 'return': {
         const value = n.value ? expression(n.value, f) : syntheticUndefined(n);
-        if (hasReference(value.types)) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Returning Object/Array values from specialized functions is deferred.', n.span);
+        const context = currentInvocation();
+        if (context?.mode === 'construct') {
+          context.outcomes!.push({ returned: valueOf(value), heap: cloneHeap(f.heap) });
+        } else if (hasReference(value.types)) {
+          fail('E_OBJECT_FUNCTION_BOUNDARY', 'Returning Object/Array values from ordinary specialized calls is deferred.', n.span);
+        }
         f.returns.push(value.types); f.reachable = false; return { ...n, value };
       }
       case 'break': {
@@ -431,5 +549,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     }
   }
 
-  return { body: statements(program.body, { env: new Map(), heap: new Map(), reachable: true, returns: [], loopDepth: 0 }), functions: instances };
+  const body = statements(program.body, { env: new Map(), heap: new Map(), reachable: true, returns: [], loopDepth: 0 });
+  for (const instance of instances) instance.usedWithNew = constructedBindings.has(instance.binding.id);
+  return { body, functions: instances };
 }

@@ -15,7 +15,10 @@ export type SemanticExpr = Node & Typed & (
   | { kind: 'member'; object: SemanticExpr; property: string }
   | { kind: 'object'; properties: { key: string; value: SemanticExpr }[] }
   | { kind: 'array'; elements: (SemanticExpr | null)[] }
-  | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt' | number; args: SemanticExpr[]; binding: Binding; arity: number }
+  | { kind: 'thisValue'; slot: string }
+  | { kind: 'newTarget'; constructorTemplateId?: number }
+  | { kind: 'construct'; target: number; binding: Binding; args: SemanticExpr[]; arity: number; mayReturnObject: boolean; observes: readonly string[] }
+  | { kind: 'call'; target: 'console' | 'isFinite' | 'isNaN' | 'parseFloat' | 'parseInt' | number; args: SemanticExpr[]; binding: Binding; arity: number; observes?: readonly string[] }
   | { kind: 'call'; target: 'array.push'; receiver: SemanticExpr; args: SemanticExpr[]; arity: number }
   | { kind: 'call'; target: 'object.hasOwn'; receiver: SemanticExpr; property: string; binding: Binding; args: []; arity: 2 }
 );
@@ -37,5 +40,7 @@ export type SemanticStatement = Node & (
 );
 export interface SemanticFunction extends Node {
   instanceId: number; binding: Binding; params: Binding[]; body: SemanticStatement[]; returnTypes: TypeSet;
+  mode: 'call' | 'construct'; observes: readonly string[]; usedWithNew: boolean;
+  thisSlot?: string; constructorTemplateId?: number; mayReturnObject?: boolean;
 }
 export interface SemanticProgram { body: SemanticStatement[]; functions: SemanticFunction[] }

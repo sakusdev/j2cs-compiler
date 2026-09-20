@@ -47,6 +47,12 @@ export function parse(source: string, file = 'input.js'): Program {
     if (n.kind === ts.SyntaxKind.TrueKeyword || n.kind === ts.SyntaxKind.FalseKeyword)
       return { ...m, kind: 'literal', value: n.kind === ts.SyntaxKind.TrueKeyword };
     if (n.kind === ts.SyntaxKind.NullKeyword) return { ...m, kind: 'literal', value: null };
+    if (n.kind === ts.SyntaxKind.ThisKeyword) return { ...m, kind: 'thisValue' };
+    if (ts.isMetaProperty(n)) {
+      if (n.keywordToken === ts.SyntaxKind.NewKeyword && n.name.text === 'target')
+        return { ...m, kind: 'newTarget' };
+      return unsupported(n, 'Meta property');
+    }
     if (ts.isIdentifier(n)) return { ...m, kind: 'identifier', name: n.text };
     if (ts.isObjectLiteralExpression(n)) {
       const properties = n.properties.map(p => {
@@ -108,6 +114,10 @@ export function parse(source: string, file = 'input.js'): Program {
     if (ts.isCallExpression(n)) {
       if (n.questionDotToken || n.typeArguments?.length) unsupported(n, 'Optional/generic call');
       return { ...m, kind: 'call', callee: expr(n.expression), args: n.arguments.map(expr) };
+    }
+    if (ts.isNewExpression(n)) {
+      if (n.typeArguments?.length) unsupported(n, 'Generic construction');
+      return { ...m, kind: 'construct', callee: expr(n.expression), args: (n.arguments ?? []).map(expr) };
     }
     return unsupported(n);
   }
