@@ -397,7 +397,7 @@ public sealed class ElectronIpcRuntime
             catch (Exception exception)
             {
                 completion.TrySetException(
-                    new IpcRemoteException(exception.GetType().Name, exception.Message));
+                    new IpcRemoteException("Error", exception.Message));
             }
         });
         return completion.Task;
