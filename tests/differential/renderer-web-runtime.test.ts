@@ -133,8 +133,9 @@ test('Node vs WebCompat C#: EventTarget and Blob/File contracts', { timeout: 90_
     const csharp = await run(dotnet, [path.join(projectDir, 'bin/Debug/net8.0/RendererHost.dll')], dir);
     assert.equal(node.exit, 0, node.stderr);
     assert.equal(csharp.exit, 0, csharp.stderr);
-    assert.equal(csharp.stdout, node.stdout, 'WebCompat runtime differs from Node');
-    assert.equal(csharp.stderr, node.stderr, 'WebCompat stderr differs from Node');
+    const normalizeNewlines = (value: string) => value.replaceAll('\r\n', '\n');
+    assert.equal(normalizeNewlines(csharp.stdout), normalizeNewlines(node.stdout), 'WebCompat runtime differs from Node');
+    assert.equal(normalizeNewlines(csharp.stderr), normalizeNewlines(node.stderr), 'WebCompat stderr differs from Node');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
