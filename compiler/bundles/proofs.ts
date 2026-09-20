@@ -78,7 +78,7 @@ export function proveBundleRuleContracts(database: RuleDatabase, ruleIds: readon
     if (!loaded) return { contract, verdict: 'missing', evidence: [`Pinned rule DB does not contain ${ruleId}.`] };
     const strategyMatches = loaded.rule.strategy === contract.strategy;
     const hashMatches = loaded.sha256 === contract.sha256;
-    const pathMatches = loaded.file.replaceAll('\\\\', '/') === contract.path;
+    const pathMatches = loaded.file.replaceAll('\\', '/') === contract.path;
     return {
       contract,
       verdict: hashMatches && strategyMatches && pathMatches ? 'proven' : 'changed',
@@ -219,7 +219,7 @@ export function proveBundleRuleRequirements(
       };
     }
 
-    const normalizedPath = loaded.file.replaceAll('\\\\', '/');
+    const normalizedPath = loaded.file.replaceAll('\\', '/');
     if (
       loaded.sha256 !== contract.sha256 ||
       loaded.rule.strategy !== contract.strategy ||
