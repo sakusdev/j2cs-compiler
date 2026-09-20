@@ -37,6 +37,10 @@ function stringLiteral(node: ts.Expression | undefined): string | undefined {
   return node && ts.isStringLiteralLike(node) ? node.text : undefined;
 }
 
+function hasExportModifier(node: ts.Node): boolean {
+  return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false);
+}
+
 function literalId(node: ts.Expression): string | undefined {
   if (ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return node.text;
   return undefined;
@@ -124,7 +128,12 @@ export function analyzeBundle(source: string, options: AnalyzeBundleOptions = {}
   let usesObjectAssign = false, usesPromiseResolve = false, esmSyntax = false;
 
   for (const statement of sourceFile.statements) {
-    if (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement) || ts.isExportAssignment(statement)) esmSyntax = true;
+    if (
+      ts.isImportDeclaration(statement) ||
+      ts.isExportDeclaration(statement) ||
+      ts.isExportAssignment(statement) ||
+      hasExportModifier(statement)
+    ) esmSyntax = true;
   }
 
   const visit = (node: ts.Node) => {
