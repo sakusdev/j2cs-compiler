@@ -38,6 +38,7 @@ public sealed class IpcRemoteException : Exception
 public sealed class IpcMainEvent
 {
     private readonly Action<string, IReadOnlyList<IpcValue>> reply;
+    private IpcValue? returnValue;
 
     internal IpcMainEvent(
         int rendererId,
@@ -51,6 +52,7 @@ public sealed class IpcMainEvent
 
     public int RendererId { get; }
     public IpcWebContents Sender { get; }
+    public bool HasReturnValue => returnValue is not null;
 
     public void Reply(string channel, params IpcValue[] arguments)
     {
@@ -58,6 +60,13 @@ public sealed class IpcMainEvent
         ArgumentNullException.ThrowIfNull(arguments);
         reply(channel, arguments);
     }
+
+    public void SetReturnValue(IpcValue value)
+        => returnValue = IpcStructuredClone.Clone(
+            value ?? throw new ArgumentNullException(nameof(value)));
+
+    internal IpcValue GetReturnValueOrUndefined()
+        => returnValue ?? IpcUndefinedValue.Instance;
 }
 
 internal sealed class IpcTaskQueue
@@ -162,6 +171,24 @@ public sealed class IpcMain
             listener(@event, arguments);
     }
 
+    internal IpcValue DispatchSync(
+        IpcRenderer renderer,
+        string channel,
+        IReadOnlyList<IpcValue> arguments)
+    {
+        IpcMainListener[] snapshot;
+        lock (gate)
+            snapshot = listeners.TryGetValue(channel, out var channelListeners)
+                ? channelListeners.ToArray()
+                : Array.Empty<IpcMainListener>();
+
+        var @event = renderer.CreateMainEvent();
+        foreach (var listener in snapshot)
+            listener(@event, arguments);
+
+        return IpcStructuredClone.Clone(@event.GetReturnValueOrUndefined());
+    }
+
     internal async ValueTask<IpcValue> DispatchInvokeAsync(
         IpcRenderer renderer,
         string channel,
@@ -170,8 +197,9 @@ public sealed class IpcMain
         InvokeRegistration registration;
         lock (gate)
         {
-            if (!handlers.TryGetValue(channel, out registration!))
+            if (!handlers.TryGetValue(channel, out var found))
                 throw new IpcNoHandlerException(channel);
+            registration = found;
             if (registration.Once)
                 handlers.Remove(channel);
         }
@@ -269,6 +297,12 @@ public sealed class IpcRenderer
         return runtime.EnqueueInvoke(this, channel, arguments);
     }
 
+    public IpcValue SendSync(string channel, params IpcValue[] arguments)
+    {
+        EnsureAlive();
+        return runtime.SendSync(this, channel, arguments);
+    }
+
     public void Destroy()
         => Interlocked.Exchange(ref destroyed, 1);
 
@@ -360,8 +394,24 @@ public sealed class ElectronIpcRuntime
             {
                 completion.TrySetException(exception);
             }
+            catch (Exception exception)
+            {
+                completion.TrySetException(
+                    new IpcRemoteException(exception.GetType().Name, exception.Message));
+            }
         });
         return completion.Task;
+    }
+
+    internal IpcValue SendSync(
+        IpcRenderer renderer,
+        string channel,
+        IReadOnlyList<IpcValue> arguments)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(channel);
+        renderer.EnsureAlive();
+        var snapshot = IpcStructuredClone.CloneArguments(arguments);
+        return IpcMain.DispatchSync(renderer, channel, snapshot);
     }
 
     internal void EnqueueMainToRenderer(
