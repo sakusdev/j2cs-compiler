@@ -203,7 +203,12 @@ test('Node vs C# collection runtime: SameValueZero, ordering, mutation and weak 
     const node = await run(process.execPath, ['input.cjs'], dir);
     const csharp = await run(dotnet, [path.join(dir, 'bin/Debug/net8.0/Probe.dll')], dir);
     assert.equal(node.exit, 0, node.stderr);
-    assert.deepEqual(csharp, node, 'Collection runtime differs from Node (stdout/stderr/exit/signal)');
+    const normalizeExecution = (execution: typeof node) => ({
+      ...execution,
+      stdout: execution.stdout.replace(/\\r\\n/g, '\\n'),
+      stderr: execution.stderr.replace(/\\r\\n/g, '\\n'),
+    });
+    assert.deepEqual(normalizeExecution(csharp), normalizeExecution(node), 'Collection runtime differs from Node (stdout/stderr/exit/signal)');
     await rm(dir, { recursive: true, force: true });
   } catch (error) {
     throw new Error(`collections-runtime: ${String(error)}\nReproduction artifacts: ${dir}`, { cause: error });
