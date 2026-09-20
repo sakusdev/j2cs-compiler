@@ -36,7 +36,7 @@
       "ruleId": "web.urlsearchparams.to-string",
       "sha256": "f2c8a51bc1614a3090f9645a93f3c703af5cbe78b0a0c553cad15a182b8c8473",
       "selector": "URLSearchParams.toString",
-      "lowering": "NodeUrlSearchParams.Serialize",
+      "lowering": "WebUrlSearchParams.Serialize",
       "requires": [
         { "fact": "web.urlSearchParams.profile", "equals": "string-list-v1" }
       ]
