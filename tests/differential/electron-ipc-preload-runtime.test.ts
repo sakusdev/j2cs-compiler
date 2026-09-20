@@ -45,6 +45,10 @@ runtime.IpcMain.On("alias", (@event, arguments) =>
 renderer.Send("alias", source, source);
 await runtime.DrainAsync();
 
+runtime.IpcMain.On("sync", (@event, arguments) =>
+    @event.SetReturnValue(new IpcStringValue(S(arguments[0]) + "!")));
+Console.WriteLine("sync:" + S(renderer.SendSync("sync", new IpcStringValue("ok"))));
+
 var order = 0;
 runtime.IpcMain.On("ordered", (@event, arguments) =>
 {
@@ -65,10 +69,9 @@ Console.WriteLine("order:result:" + N(await orderedResult));
 runtime.IpcMain.HandleOnce("once", (@event, arguments) =>
     ValueTask.FromResult<IpcValue>(new IpcStringValue("first")));
 var onceFirst = renderer.InvokeAsync("once");
-await runtime.DrainAsync();
-Console.WriteLine("once:" + S(await onceFirst));
 var onceSecond = renderer.InvokeAsync("once");
 await runtime.DrainAsync();
+Console.WriteLine("once:" + S(await onceFirst));
 try
 {
     await onceSecond;
@@ -207,6 +210,12 @@ function send(channel, ...args) {
     for (const listener of mainListeners.get(channel) ?? []) listener(snapshot);
   });
 }
+function sendSync(channel, ...args) {
+  const snapshot = cloneArgs(args);
+  const event = { returnValue: undefined };
+  for (const listener of mainListeners.get(channel) ?? []) listener(snapshot, event);
+  return structuredClone(event.returnValue);
+}
 function invoke(channel, ...args) {
   const snapshot = cloneArgs(args);
   let resolve, reject;
@@ -245,6 +254,9 @@ on('alias', args => console.log('alias:' + B(args[0] === args[1])));
 send('alias', source, source);
 await drain();
 
+on('sync', (args, event) => { event.returnValue = args[0] + '!'; });
+console.log('sync:' + sendSync('sync', 'ok'));
+
 let order = 0;
 on('ordered', () => {
   order++;
@@ -262,10 +274,9 @@ console.log('order:result:' + await orderedResult);
 
 handle('once', () => 'first', true);
 const onceFirst = invoke('once');
-await drain();
-console.log('once:' + await onceFirst);
 const onceSecond = invoke('once');
 await drain();
+console.log('once:' + await onceFirst);
 try { await onceSecond; } catch { console.log('once:no-handler'); }
 
 handle('fails', () => { throw new Error('boom'); });
