@@ -53,10 +53,11 @@ const generatorFacts = {
     'generator.state': fact(phase, 'Straight-line generator use proves the pre-call generator state'),
     ['member.' + member + '.pristine']: fact(true, 'Generator method properties cannot be mutated or escaped in this bounded profile'),
   }),
-  delegation: (resumeKind?: 'return') => ({
+  delegation: (resumeKind?: 'return', innerReturnAbsent = false) => ({
     'context.syncGenerator': fact(true, 'yield* occurs inside a normalized synchronous generator body'),
     'delegation.active': fact(true, 'Generated state machine owns the active canonical delegated generator'),
     ...(resumeKind ? { 'outer.resumeKind': fact(resumeKind, 'Generated Return path forwards return completion to the active delegate') } : {}),
+    ...(innerReturnAbsent ? { 'inner.return.absent': fact(true, 'Array-literal delegation is specialized to the reviewed built-in array iterator, which has no return method') } : {}),
   }),
 };
 
@@ -413,8 +414,12 @@ function compileGeneratorProgram(program: GProgram, index: RuleIndex): Generator
       current = c;
       return c;
     };
-    const endWithYield = (value: Value, resume?: Slot): void => {
-      proveGeneratorRule(index, trace as GeneratorTrace[], 'generator.yield.value', generatorFacts.body(), def.source.span);
+    const endWithYield = (
+      value: Value,
+      resume?: Slot,
+      ruleId: 'generator.yield.value' | 'generator.yield.undefined' = 'generator.yield.value',
+    ): void => {
+      proveGeneratorRule(index, trace as GeneratorTrace[], ruleId, generatorFacts.body(), def.source.span);
       const resumeCase = nextState;
       current.lines.push('state = ' + resumeCase + ';');
       current.lines.push('return JsGeneratorStep.Yield(' + value.code + ');');
@@ -484,11 +489,12 @@ function compileGeneratorProgram(program: GProgram, index: RuleIndex): Generator
       const target = completionTarget(s);
       if (!y.delegate) {
         const yielded = valueExpression(y.value, { env, machine: true });
+        const yieldRule = y.bare ? 'generator.yield.undefined' : 'generator.yield.value';
         if (target.mode === 'slot' && target.slot) {
           // The lexical declaration is initialized by the resume value, not by the yielded value.
-          endWithYield(yielded, target.slot);
+          endWithYield(yielded, target.slot, yieldRule);
         } else {
-          endWithYield(yielded);
+          endWithYield(yielded, undefined, yieldRule);
           if (target.mode === 'return') {
             proveGeneratorRule(index, trace as GeneratorTrace[], 'generator.return.statement-value', generatorFacts.body(), s.span);
             current.lines.push('state = -1;');
@@ -502,6 +508,14 @@ function compileGeneratorProgram(program: GProgram, index: RuleIndex): Generator
       proveGeneratorRule(index, trace as GeneratorTrace[], 'generator.yield-star.delegate-next', generatorFacts.body(), y.span);
       proveGeneratorRule(index, trace as GeneratorTrace[], 'generator.yield-star.completion-value', generatorFacts.delegation(), y.span);
       if (y.value.kind === 'array') {
+        proveGeneratorRule(
+          index,
+          trace as GeneratorTrace[],
+          'generator.yield-star.return-missing',
+          generatorFacts.delegation('return', true),
+          y.span,
+        );
+        contracts.add('generator.yield-star.array-return-missing-v1');
         for (const element of y.value.elements) {
           const yielded = element ? valueExpression(element, { env, machine: true }) : literal(undefined);
           const resumeCase = nextState;
