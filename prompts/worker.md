@@ -19,7 +19,7 @@ Your job is to claim exactly one READY compiler workstream Issue, implement it e
 4. If that branch already exists, assume another worker owns it and select another READY Issue.
 5. Never create scratch/noop Issues during discovery.
 
-After claim, update the Issue status to `STATUS: IN_PROGRESS` when possible.
+For RECLAIM work, inspect all existing branch commits, the open PR if any, unresolved review comments, and latest CI before implementation. Preserve valid prior work; do not reset or recreate the branch.
 
 ## Before implementation
 
