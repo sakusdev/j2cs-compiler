@@ -26,6 +26,7 @@ export type GeneratorFacts = Readonly<Record<string, { value: ProofValue; eviden
 const reviewed = new Map<string, string>([
   ['generator.call-lazy', 'bd3409af05e37567df3894ddca15d12192b60ea7c73c621eaa1eacf1facc152b'],
   ['generator.yield.value', 'a9f1c09b7affb1d4f2a8784dd7ba00b36637e8d5e78c994bf2dd935e8b9152be'],
+  ['generator.yield.undefined', 'f239a8a96617533ee8fd05364bb3ea1a581654b7ed5066862304d51253b4331d'],
   ['generator.next.initial-argument-ignored', '077f666284346fed63cbc886ab25d62d72b809b65330f0be604864f2682f9325'],
   ['generator.next.resume-value', '2dc833b67120231872f1107535413c410f81cc588bdff372600b2cb83880b9d6'],
   ['generator.completed.next', 'b8c8a7ffd2e15bc5915979741730563d21d67660fdcfbc73a1230f1f16da6442'],
@@ -37,6 +38,7 @@ const reviewed = new Map<string, string>([
   ['generator.yield-star.completion-value', 'b49267070d86742614eeb1f0e0456c0fad23cc6fbcd82289d9972c0ea0ed08ee'],
   ['generator.yield-star.resume-forward', '00ab3b81a3f1757bda54f15051d121624ba184ee2c5d51cf7325d29c62399487'],
   ['generator.yield-star.return-forward', '9ea1753c1c95af3d1e79c475330896cc18b95b83bcadd428bc4ea3725deff1a2'],
+  ['generator.yield-star.return-missing', '09de4044bb2da6c478bd32f295ef23b73960146b206d916ebc6aa5f66f1173f2'],
 ]);
 
 const requirementFacts: Readonly<Record<string, string>> = {
@@ -48,6 +50,7 @@ const requirementFacts: Readonly<Record<string, string>> = {
   builtin_return_not_overridden: 'member.return.pristine',
   delegation_is_active: 'delegation.active',
   outer_resume_kind: 'outer.resumeKind',
+  inner_return_absent: 'inner.return.absent',
 };
 
 export function proveGeneratorRule(
