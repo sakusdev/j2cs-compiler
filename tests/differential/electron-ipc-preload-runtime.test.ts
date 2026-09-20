@@ -115,6 +115,13 @@ renderer.On("state", arguments => Console.WriteLine("renderer:" + S(arguments[0]
 renderer.WebContents.Send("state", new IpcStringValue("ready"));
 await runtime.DrainAsync();
 
+runtime.IpcMain.On("sync", (@event, arguments) =>
+{
+    Console.WriteLine("sync:main:" + S(arguments[0]));
+    @event.SetReturnValue(new IpcStringValue("sync-reply"));
+});
+Console.WriteLine("sync:return:" + S(renderer.SendSync("sync", new IpcStringValue("request"))));
+
 try
 {
     renderer.Send("bad", new IpcUnsupportedValue("Function"));
@@ -156,9 +163,9 @@ var api = new BridgeObjectValue(new[]
 });
 preload.ExposeInMainWorld("api", api);
 preload.TryGetMainWorldValue("api", out var exposedValue);
+Console.WriteLine("bridge:copied:" + B(!ReferenceEquals(api, exposedValue)));
+Console.WriteLine("bridge:frozen:" + B(exposedValue is BridgeFrozenObjectValue));
 var exposed = (BridgeFrozenObjectValue)exposedValue!;
-Console.WriteLine("bridge:copied:" + B(!ReferenceEquals(api, exposed)));
-Console.WriteLine("bridge:frozen:" + B(exposed is BridgeFrozenObjectValue));
 Console.WriteLine("bridge:x:" + ((BridgeNumberValue)exposed.Properties["x"]).Value);
 var proxy = (BridgeFunctionProxyValue)exposed.Properties["echo"];
 var echoed = (BridgeStringValue)await proxy.InvokeAsync(new BridgeStringValue("ok"));
@@ -209,6 +216,12 @@ function send(channel, ...args) {
   queue.push(async () => {
     for (const listener of mainListeners.get(channel) ?? []) listener(snapshot);
   });
+}
+function sendSync(channel, ...args) {
+  const snapshot = cloneArgs(args);
+  const event = { returnValue: undefined };
+  for (const listener of mainListeners.get(channel) ?? []) listener(snapshot, event);
+  return structuredClone(event.returnValue);
 }
 function sendSync(channel, ...args) {
   const snapshot = cloneArgs(args);
@@ -306,6 +319,12 @@ function webContentsSend(channel, ...args) {
 }
 webContentsSend('state', 'ready');
 await drain();
+
+on('sync', (args, event) => {
+  console.log('sync:main:' + args[0]);
+  event.returnValue = 'sync-reply';
+});
+console.log('sync:return:' + sendSync('sync', 'request'));
 
 try { structuredClone(() => {}); }
 catch { console.log('clone:blocked'); }
