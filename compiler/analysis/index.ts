@@ -466,7 +466,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
             catchFlow.env.set(binding.id, unionValue(...values));
           }
           const catchBody = statement(n.catchClause.body, catchFlow) as SS & { kind: 'block' };
-          catchClause = { ...n.catchClause, ...(binding ? { binding } : {}), body: catchBody };
+          catchClause = { id: n.catchClause.id, span: n.catchClause.span, ...(binding ? { binding } : {}), body: catchBody };
           pending.push(...catchFlow.abrupt);
           if (catchFlow.reachable) normalStates.push(stateOf(catchFlow));
         } else if (!n.catchClause) {
@@ -475,8 +475,8 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         if (!n.finallyBlock) {
           f.abrupt.push(...pending);
           if (normalStates.length) { applyState(f, joinStates(entry, normalStates)); f.reachable = true; } else f.reachable = false;
-          return { ...n, body, ...(catchClause ? { catchClause } : {}), pendingAbruptKinds: kinds(pending),
-            finallyAbruptKinds: [], finallyCanCompleteNormally: true };
+          return { id: n.id, span: n.span, kind: 'try', body, ...(catchClause ? { catchClause } : {}),
+            pendingAbruptKinds: kinds(pending), finallyAbruptKinds: [], finallyCanCompleteNormally: true };
         }
         const allInputs = [...normalStates, ...pending.map(x => x.state)];
         const finallyInput = allInputs.length ? joinStates(entry, allInputs) : entry;
@@ -489,7 +489,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
           for (const item of pending) f.abrupt.push({ ...item, state: finalState });
           if (normalStates.length) { applyState(f, finalState); f.reachable = true; } else f.reachable = false;
         } else f.reachable = false;
-        return { ...n, body, ...(catchClause ? { catchClause } : {}), finallyBlock,
+        return { id: n.id, span: n.span, kind: 'try', body, ...(catchClause ? { catchClause } : {}), finallyBlock,
           pendingAbruptKinds: kinds(pending), finallyAbruptKinds: kinds(finalAbrupt),
           finallyCanCompleteNormally: finallyFlow.reachable };
       }
