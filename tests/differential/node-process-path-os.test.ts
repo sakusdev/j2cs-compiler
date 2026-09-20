@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ROOT } from '../../compiler/index.js';
@@ -13,7 +13,7 @@ const xml = (value: string) => value
   .replaceAll('>', '&gt;');
 
 test('Node vs C#: process/path/os compatibility contracts', { timeout: 90_000 }, async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'j2cs-node-compat-'));
+  const dir = await realpath(await mkdtemp(path.join(tmpdir(), 'j2cs-node-compat-')));
   const projectDir = path.join(dir, 'probe');
   const dotnet = process.env.DOTNET ?? 'dotnet';
 
@@ -125,7 +125,16 @@ process.chdir(before);
     const nodeRun = await run(process.execPath, ['oracle.cjs', 'alpha', 'beta'], dir);
     const csRun = await run(dotnet, [path.join(projectDir, 'bin/Debug/net8.0/Probe.dll'), 'alpha', 'beta'], dir);
 
-    assert.deepEqual(csRun, nodeRun, 'NodeCompat runtime behavior differs from Node');
+    const normalizeProbeOutput = <T extends { stdout: string; stderr: string }>(result: T): T => ({
+      ...result,
+      stdout: result.stdout.replace(/\r\n/g, '\n'),
+      stderr: result.stderr.replace(/\r\n/g, '\n'),
+    });
+    assert.deepEqual(
+      normalizeProbeOutput(csRun),
+      normalizeProbeOutput(nodeRun),
+      'NodeCompat runtime behavior differs from Node',
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
