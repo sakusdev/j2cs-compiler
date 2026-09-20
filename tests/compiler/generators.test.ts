@@ -77,6 +77,22 @@ test('yield star generator delegation connects delegate, resume, completion and 
   ]) assert.ok(ids.has(id), 'missing yield* proof trace ' + id);
 });
 
+test('bare yield and array delegation close use dedicated canonical rules', () => {
+  const bare = compile(`
+    function* g(){ return yield; }
+    const it = g(); let r = it.next(); r = it.next(8);
+    console.log(r.value === 8, r.done);
+  `, index);
+  assert.ok(bare.trace.some(t => t.ruleId === 'generator.yield.undefined'));
+
+  const array = compile(`
+    function* g(){ yield* [1, 2]; return 4; }
+    const it = g(); let r = it.next(); r = it.return(9);
+    console.log(r.value === 9, r.done);
+  `, index);
+  assert.ok(array.trace.some(t => t.ruleId === 'generator.yield-star.return-missing'));
+});
+
 test('adjacent generator features stay fail closed until owning lanes merge', () => {
   rejects('async function* g(){ yield 1; }', 'E_GENERATOR_ASYNC_DEFERRED');
   rejects('function* g(){ try { yield 1; } finally {} }', 'E_GENERATOR_EXCEPTIONS_DEPENDENCY');
