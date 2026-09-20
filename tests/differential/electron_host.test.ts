@@ -38,6 +38,16 @@ Console.WriteLine("visible:" + B(window.IsVisible()));
 window.Hide();
 Console.WriteLine("visible:" + B(window.IsVisible()));
 
+window.Blurred += (_, _) => Console.WriteLine("window:blurred-transfer");
+var other = BrowserWindow.Create(new BrowserWindowOptions { Show = false });
+window.Focus();
+Console.WriteLine("focus:first:" + B(window.IsFocused()));
+Console.WriteLine("focus:other:" + B(other.IsFocused()));
+other.Focus();
+Console.WriteLine("focus:first:" + B(window.IsFocused()));
+Console.WriteLine("focus:other:" + B(other.IsFocused()));
+other.Destroy();
+
 window.SetSize(900, 700);
 var bounds = window.GetBounds();
 Console.WriteLine("bounds:" + bounds.Width + "x" + bounds.Height);
@@ -84,6 +94,14 @@ window.Close();
 Console.WriteLine("destroyed:" + B(window.IsDestroyed()));
 window.Close();
 Console.WriteLine("destroyed:" + B(window.IsDestroyed()));
+try
+{
+    _ = contents.GetUrl();
+}
+catch (ElectronCompatibilityException)
+{
+    Console.WriteLine("contents:destroyed");
+}
 
 App.BeforeQuit += (_, _) => Console.WriteLine("app:before-quit");
 App.WillQuit += (_, _) => Console.WriteLine("app:will-quit");
@@ -201,6 +219,21 @@ visible = false;
 console.log('window:hidden');
 console.log('visible:' + B(visible));
 
+let firstFocused = false;
+let otherFocused = false;
+console.log('host:focus');
+firstFocused = true;
+console.log('window:focused');
+console.log('focus:first:' + B(firstFocused));
+console.log('focus:other:' + B(otherFocused));
+console.log('host:focus');
+firstFocused = false;
+otherFocused = true;
+console.log('window:blurred-transfer');
+console.log('focus:first:' + B(firstFocused));
+console.log('focus:other:' + B(otherFocused));
+console.log('host:destroy');
+
 console.log('host:bounds:900x700');
 console.log('bounds:900x700');
 
@@ -242,6 +275,7 @@ close();
 console.log('destroyed:' + B(destroyed));
 close();
 console.log('destroyed:' + B(destroyed));
+console.log('contents:destroyed');
 
 console.log('app:before-quit');
 console.log('app:will-quit');
