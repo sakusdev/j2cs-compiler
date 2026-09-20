@@ -1,6 +1,6 @@
 import { fail } from '../diagnostics/index.js';
 import type { Expr, Node, Program, Statement } from '../parser/ast.js';
-import type { AbruptKind, SemanticExpr as SE, SemanticForInitializer, SemanticFunction, SemanticProgram, SemanticStatement as SS } from '../ir/semantic.js';
+import type { AbruptKind, SemanticCatchClause, SemanticExpr as SE, SemanticForInitializer, SemanticFunction, SemanticProgram, SemanticStatement as SS } from '../ir/semantic.js';
 import { type Binding, type Bindings } from './bindings.js';
 import { exactly, hasReference, literalType, union, type TypeSet } from './facts.js';
 
@@ -455,7 +455,7 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         const thrown = tryFlow.abrupt.filter(x => x.kind === 'throw');
         const pending: AbruptState[] = tryFlow.abrupt.filter(x => x.kind !== 'throw');
         const normalStates: State[] = tryFlow.reachable ? [stateOf(tryFlow)] : [];
-        let catchClause: SS extends never ? never : import('../ir/semantic.js').SemanticCatchClause | undefined;
+        let catchClause: SemanticCatchClause | undefined;
         if (n.catchClause && thrown.length) {
           const catchStart = joinStates(entry, thrown.map(x => x.state));
           const catchFlow = fromState(catchStart, f.loopDepth);
