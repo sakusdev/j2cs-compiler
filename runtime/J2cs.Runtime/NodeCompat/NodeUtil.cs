@@ -109,7 +109,7 @@ public static class NodeUtil
         JsKind.Null => "null",
         JsKind.Boolean => value.Boolean ? "true" : "false",
         JsKind.Number => double.IsFinite(value.Number) ? JsNumber.Format(value.Number) : "null",
-        JsKind.String => """ + JsonEscape(value.String) + """,
+        JsKind.String => "\\\"" + JsonEscape(value.String) + "\\\"",
         _ => throw new InvalidOperationException("NODE_URL_UTIL_ZLIB_MISC util.format %j object formatting is not enabled."),
     };
 
