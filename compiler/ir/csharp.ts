@@ -21,7 +21,9 @@ export type CsStatement =
   | { kind: 'for'; condition?: CsExpr; update?: CsExpr; body: CsStatement }
   | { kind: 'break' }
   | { kind: 'continue' }
-  | { kind: 'return'; value: CsExpr };
+  | { kind: 'return'; value: CsExpr }
+  | { kind: 'throw'; value: CsExpr }
+  | { kind: 'try'; body: CsStatement; catchClause?: { binding?: string; body: CsStatement }; finallyBlock?: CsStatement };
 export interface CsFunction { name: string; params: string[]; body: CsStatement[] }
 export interface CsProgram { body: CsStatement[]; functions: CsFunction[] }
 export function box(value: CsExpr): CsExpr {
