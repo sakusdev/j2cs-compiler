@@ -9,6 +9,8 @@ public sealed class PreloadContext
 
     public ContextBridge ContextBridge { get; }
 
+    public static PreloadContext CreateIsolated() => new();
+
     public void SetIsolatedWindowValue(string key, BridgeValue value)
     {
         ArgumentException.ThrowIfNullOrEmpty(key);
@@ -27,4 +29,13 @@ public sealed class PreloadContext
 
     public void ExposeInMainWorld(string key, BridgeValue api)
         => ContextBridge.ExposeInMainWorld(key, api);
+}
+
+public static class Preload
+{
+    /// <summary>
+    /// Modern Electron profiles (12+) default contextIsolation to true. Compiler
+    /// proof is required before using this helper for a concrete target profile.
+    /// </summary>
+    public static bool DefaultContextIsolation() => true;
 }
