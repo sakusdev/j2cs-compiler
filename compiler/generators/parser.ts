@@ -13,7 +13,7 @@ export type GExpr = GNode & (
   | { kind: 'assign'; name: string; value: GExpr }
   | { kind: 'member'; object: GExpr; property: string }
   | { kind: 'call'; callee: GExpr; args: GExpr[] }
-  | { kind: 'yield'; delegate: boolean; value: GExpr }
+  | { kind: 'yield'; delegate: boolean; bare: boolean; value: GExpr }
 );
 export type GStmt = GNode & (
   | { kind: 'variable'; mode: 'const' | 'let'; name: string; initializer?: GExpr }
@@ -116,6 +116,7 @@ export function parseGeneratorProgram(source: string, file = 'input.js'): GProgr
         span: s,
         kind: 'yield',
         delegate: !!n.asteriskToken,
+        bare: !n.expression,
         value: n.expression ? expr(n.expression) : { span: s, kind: 'literal', value: undefined },
       };
     }
