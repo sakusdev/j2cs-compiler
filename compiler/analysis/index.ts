@@ -1,15 +1,15 @@
 import { fail } from '../diagnostics/index.js';
 import type { Expr, Node, Program, Statement } from '../parser/ast.js';
-import type { SemanticExpr as SE, SemanticForInitializer, SemanticFunction, SemanticProgram, SemanticStatement as SS } from '../ir/semantic.js';
+import type { AbruptKind, SemanticCatchClause, SemanticExpr as SE, SemanticForInitializer, SemanticFunction, SemanticProgram, SemanticStatement as SS } from '../ir/semantic.js';
 import { type Binding, type Bindings } from './bindings.js';
 import { exactly, hasReference, literalType, union, type TypeSet } from './facts.js';
 
 interface ValueInfo { types: TypeSet; refs?: readonly number[] }
 interface Shape { kind: 'Object' | 'Array'; properties: Map<string, ValueInfo>; length?: number }
 type Environment = Map<number, ValueInfo>;
-interface Flow { env: Environment; heap: Map<number, Shape>; reachable: boolean; returns: TypeSet[]; loopDepth: number }
 interface State { env: Environment; heap: Map<number, Shape> }
-interface LoopControl { breaks: State[]; continues: State[] }
+interface AbruptState { kind: AbruptKind; state: State; value?: ValueInfo }
+interface Flow { env: Environment; heap: Map<number, Shape>; reachable: boolean; abrupt: AbruptState[]; loopDepth: number }
 const MAX_LOOP_FIXPOINT = 16;
 const UNDEFINED: ValueInfo = { types: ['Undefined'] };
 const objectPrototypeKeys = new Set(['__proto__', 'constructor', 'hasOwnProperty', 'isPrototypeOf',
@@ -152,13 +152,19 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
     const found = cache.get(key); if (found) return found;
     active.add(b.id);
     const instanceId = nextInstance++, params = fn.params.map(p => bindings.declarations.get(p.id)!);
-    const f: Flow = { env: new Map(params.map((p, i) => [p.id, valueOf(args[i]!)])), heap: new Map(), reachable: true, returns: [], loopDepth: 0 };
+    const f: Flow = { env: new Map(params.map((p, i) => [p.id, valueOf(args[i]!)])), heap: new Map(),
+      reachable: true, abrupt: [], loopDepth: 0 };
     const body = statements(fn.body.body, f);
     if (f.reachable) {
       const value = syntheticUndefined(fn.body);
-      body.push({ ...fn.body, kind: 'return', value }); f.returns.push(value.types);
+      body.push({ ...fn.body, kind: 'return', value });
+      f.abrupt.push({ kind: 'return', state: stateOf(f), value: valueOf(value) });
+      f.reachable = false;
     }
-    const instance: SemanticFunction = { ...fn, instanceId, binding: b, params, body, returnTypes: union(...f.returns) };
+    const returns = f.abrupt.filter(x => x.kind === 'return' && x.value).map(x => x.value!.types);
+    const throws = f.abrupt.filter(x => x.kind === 'throw' && x.value).map(x => x.value!.types);
+    const instance: SemanticFunction = { ...fn, instanceId, binding: b, params, body,
+      returnTypes: union(...returns), throwTypes: union(...throws) };
     instances.push(instance); cache.set(key, instance); active.delete(b.id); return instance;
   }
 
@@ -290,20 +296,29 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         }
         if (binding.kind !== 'function') fail('E_INDIRECT_CALL', `Calling '${binding.name}' requires callable runtime support.`, n.span);
         const args = n.args.map(a => expression(a, f)), instance = instantiate(binding, args, n);
-        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length, types: instance.returnTypes };
+        if (instance.throwTypes.length) f.abrupt.push({ kind: 'throw', state: stateOf(f), value: { types: instance.throwTypes } });
+        return { ...n, kind: 'call', binding, target: instance.instanceId, args, arity: instance.params.length,
+          types: instance.returnTypes, throwTypes: instance.throwTypes };
       }
     }
   }
 
-  function statements(nodes: Statement[], f: Flow, loop?: LoopControl): SS[] {
+  function statements(nodes: Statement[], f: Flow): SS[] {
     const result: SS[] = [];
     for (const n of nodes) {
       if (!f.reachable) break;
-      const item = statement(n, f, loop); if (item) result.push(item);
+      const item = statement(n, f); if (item) result.push(item);
     }
     return result;
   }
-  function statement(n: Statement, f: Flow, loop?: LoopControl): SS | undefined {
+  function fromState(state: State, loopDepth: number): Flow {
+    return { env: cloneEnv(state.env), heap: cloneHeap(state.heap), reachable: true, abrupt: [], loopDepth };
+  }
+  function kinds(items: AbruptState[]): AbruptKind[] {
+    const order: AbruptKind[] = ['throw', 'return', 'break', 'continue'];
+    return order.filter(kind => items.some(item => item.kind === kind));
+  }
+  function statement(n: Statement, f: Flow): SS | undefined {
     switch (n.kind) {
       case 'empty': case 'function': return;
       case 'variable': {
@@ -312,124 +327,174 @@ export function analyze(program: Program, bindings: Bindings): SemanticProgram {
         f.env.set(binding.id, valueOf(initializer)); return { ...n, binding, initializer };
       }
       case 'expression': return { ...n, expression: expression(n.expression, f) };
-      case 'block': return { ...n, body: statements(n.body, f, loop) };
+      case 'block': return { ...n, body: statements(n.body, f) };
       case 'return': {
         const value = n.value ? expression(n.value, f) : syntheticUndefined(n);
         if (hasReference(value.types)) fail('E_OBJECT_FUNCTION_BOUNDARY', 'Returning Object/Array values from specialized functions is deferred.', n.span);
-        f.returns.push(value.types); f.reachable = false; return { ...n, value };
+        f.abrupt.push({ kind: 'return', state: stateOf(f), value: valueOf(value) });
+        f.reachable = false; return { ...n, value };
       }
-      case 'break': {
-        if (!loop) return fail('E_BREAK_CONTEXT', 'break outside a loop is unsupported.', n.span);
-        loop.breaks.push(stateOf(f)); f.reachable = false; return { ...n, kind: 'break' };
+      case 'throw': {
+        const value = expression(n.value, f);
+        f.abrupt.push({ kind: 'throw', state: stateOf(f), value: valueOf(value) });
+        f.reachable = false; return { ...n, value };
       }
-      case 'continue': {
-        if (!loop) return fail('E_CONTINUE_CONTEXT', 'continue outside a loop is unsupported.', n.span);
-        loop.continues.push(stateOf(f)); f.reachable = false; return { ...n, kind: 'continue' };
-      }
+      case 'break':
+        f.abrupt.push({ kind: 'break', state: stateOf(f) }); f.reachable = false; return { ...n, kind: 'break' };
+      case 'continue':
+        f.abrupt.push({ kind: 'continue', state: stateOf(f) }); f.reachable = false; return { ...n, kind: 'continue' };
       case 'if': {
         const condition = expression(n.condition, f);
-        const a: Flow = { env: cloneEnv(f.env), heap: cloneHeap(f.heap), reachable: true, returns: [], loopDepth: f.loopDepth };
-        const b: Flow = { env: cloneEnv(f.env), heap: cloneHeap(f.heap), reachable: true, returns: [], loopDepth: f.loopDepth };
-        const then = statement(n.then, a, loop) ?? emptyStatement(n.then);
-        const otherwise = n.otherwise && (statement(n.otherwise, b, loop) ?? emptyStatement(n.otherwise));
+        const a = fromState(stateOf(f), f.loopDepth), b = fromState(stateOf(f), f.loopDepth);
+        const then = statement(n.then, a) ?? emptyStatement(n.then);
+        const otherwise = n.otherwise && (statement(n.otherwise, b) ?? emptyStatement(n.otherwise));
         const live = [a, b].filter(x => x.reachable);
         if (live.length) {
           f.env = joinEnv(f.env, live.map(x => x.env));
           f.heap = joinHeaps(live.map(x => x.heap));
         }
-        f.returns.push(...a.returns, ...b.returns); f.reachable = live.length > 0;
+        f.abrupt.push(...a.abrupt, ...b.abrupt); f.reachable = live.length > 0;
         return { ...n, condition, then, otherwise };
       }
       case 'while': {
-        const entry = stateOf(f);
-        let head = stateOf(f);
+        const entry = stateOf(f); let head = stateOf(f);
         const run = (state: State) => {
-          const iter: Flow = { env: cloneEnv(state.env), heap: cloneHeap(state.heap), reachable: true, returns: [], loopDepth: f.loopDepth + 1 };
+          const iter = fromState(state, f.loopDepth + 1);
           const condition = expression(n.condition, iter), conditionExit = stateOf(iter);
-          const control: LoopControl = { breaks: [], continues: [] };
-          const body = statement(n.body, iter, control) ?? emptyStatement(n.body);
-          const backs = [...(iter.reachable ? [stateOf(iter)] : []), ...control.continues];
-          return { condition, body, conditionExit, back: backs.length ? joinStates(state, backs) : undefined,
-            breaks: control.breaks, returns: iter.returns };
+          const body = statement(n.body, iter) ?? emptyStatement(n.body);
+          const continues = iter.abrupt.filter(x => x.kind === 'continue');
+          const breaks = iter.abrupt.filter(x => x.kind === 'break');
+          const outer = iter.abrupt.filter(x => x.kind === 'return' || x.kind === 'throw');
+          const backs = [...(iter.reachable ? [stateOf(iter)] : []), ...continues.map(x => x.state)];
+          return { condition, body, conditionExit, back: backs.length ? joinStates(state, backs) : undefined, breaks, outer };
         };
-        for (let i=0;i<MAX_LOOP_FIXPOINT;i++) {
-          const pass=run(head), next=widen(entry, pass.back ? [pass.back] : []);
-          if (sameState(head,next)) break;
-          head=next; if(i===MAX_LOOP_FIXPOINT-1) fail('E_ANALYSIS','Loop fixed point did not converge.',n.span);
+        for (let i = 0; i < MAX_LOOP_FIXPOINT; i++) {
+          const pass = run(head), next = widen(entry, pass.back ? [pass.back] : []);
+          if (sameState(head, next)) break;
+          head = next; if (i === MAX_LOOP_FIXPOINT - 1) fail('E_ANALYSIS', 'Loop fixed point did not converge.', n.span);
         }
-        const final=run(head); f.returns.push(...final.returns);
-        const exits=[final.conditionExit,...final.breaks];
-        applyState(f, joinStates(entry,exits)); f.reachable=exits.length>0;
+        const final = run(head); f.abrupt.push(...final.outer);
+        const exits = [final.conditionExit, ...final.breaks.map(x => x.state)];
+        applyState(f, joinStates(entry, exits)); f.reachable = exits.length > 0;
         return { ...n, condition: final.condition, body: final.body };
       }
       case 'doWhile': {
-        const entry=stateOf(f); let head=stateOf(f);
-        const run=(state:State)=>{
-          const iter:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
-          const control:LoopControl={breaks:[],continues:[]};
-          const body=statement(n.body,iter,control)??emptyStatement(n.body);
-          const backs=[...(iter.reachable?[stateOf(iter)]:[]),...control.continues];
-          let condition:SE, conditionExit:State|undefined, back:State|undefined;
-          if(backs.length){
-            const testState=joinStates(state,backs);
-            const test:Flow={env:cloneEnv(testState.env),heap:cloneHeap(testState.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
-            condition=expression(n.condition,test); conditionExit=stateOf(test); back=stateOf(test);
+        const entry = stateOf(f); let head = stateOf(f);
+        const run = (state: State) => {
+          const iter = fromState(state, f.loopDepth + 1);
+          const body = statement(n.body, iter) ?? emptyStatement(n.body);
+          const continues = iter.abrupt.filter(x => x.kind === 'continue');
+          const breaks = iter.abrupt.filter(x => x.kind === 'break');
+          const outer = iter.abrupt.filter(x => x.kind === 'return' || x.kind === 'throw');
+          const backs = [...(iter.reachable ? [stateOf(iter)] : []), ...continues.map(x => x.state)];
+          let condition: SE, conditionExit: State | undefined, back: State | undefined;
+          let conditionAbrupt: AbruptState[] = [];
+          if (backs.length) {
+            const test = fromState(joinStates(state, backs), f.loopDepth + 1);
+            condition = expression(n.condition, test); conditionExit = stateOf(test); back = stateOf(test);
+            conditionAbrupt = test.abrupt.filter(x => x.kind === 'throw' || x.kind === 'return');
           } else {
-            const unreachable:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
-            condition=expression(n.condition,unreachable);
+            const unreachable = fromState(state, f.loopDepth + 1);
+            condition = expression(n.condition, unreachable);
           }
-          return {condition,body,conditionExit,back,breaks:control.breaks,returns:iter.returns};
+          return { condition, body, conditionExit, back, breaks, outer: [...outer, ...conditionAbrupt] };
         };
-        for(let i=0;i<MAX_LOOP_FIXPOINT;i++){
-          const pass=run(head),next=widen(entry,pass.back?[pass.back]:[]);
-          if(sameState(head,next))break;
-          head=next;if(i===MAX_LOOP_FIXPOINT-1)fail('E_ANALYSIS','Loop fixed point did not converge.',n.span);
+        for (let i = 0; i < MAX_LOOP_FIXPOINT; i++) {
+          const pass = run(head), next = widen(entry, pass.back ? [pass.back] : []);
+          if (sameState(head, next)) break;
+          head = next; if (i === MAX_LOOP_FIXPOINT - 1) fail('E_ANALYSIS', 'Loop fixed point did not converge.', n.span);
         }
-        const final=run(head);f.returns.push(...final.returns);
-        const exits=[...(final.conditionExit?[final.conditionExit]:[]),...final.breaks];
-        if(exits.length){applyState(f,joinStates(entry,exits));f.reachable=true}else f.reachable=false;
-        return {...n,body:final.body,condition:final.condition};
+        const final = run(head); f.abrupt.push(...final.outer);
+        const exits = [...(final.conditionExit ? [final.conditionExit] : []), ...final.breaks.map(x => x.state)];
+        if (exits.length) { applyState(f, joinStates(entry, exits)); f.reachable = true; } else f.reachable = false;
+        return { ...n, body: final.body, condition: final.condition };
       }
       case 'for': {
         let initializer: SemanticForInitializer | undefined;
-        if(n.initializer?.kind==='variables'){
-          const declarations=n.initializer.declarations.map(d=>statement(d,f) as SS & {kind:'variable'});
-          initializer={...n.initializer,kind:'variables',declarations};
-        }else if(n.initializer?.kind==='expression'){
-          initializer={...n.initializer,kind:'expression',expression:expression(n.initializer.expression,f)};
+        if (n.initializer?.kind === 'variables') {
+          const declarations = n.initializer.declarations.map(d => statement(d, f) as SS & { kind: 'variable' });
+          initializer = { ...n.initializer, kind: 'variables', declarations };
+        } else if (n.initializer?.kind === 'expression') {
+          initializer = { ...n.initializer, kind: 'expression', expression: expression(n.initializer.expression, f) };
         }
-        const entry=stateOf(f);let head=stateOf(f);
-        const run=(state:State)=>{
-          const iter:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
-          let condition:SE|undefined,conditionExit:State|undefined;
-          if(n.condition){condition=expression(n.condition,iter);conditionExit=stateOf(iter)}
-          const control:LoopControl={breaks:[],continues:[]};
-          const body=statement(n.body,iter,control)??emptyStatement(n.body);
-          const backs=[...(iter.reachable?[stateOf(iter)]:[]),...control.continues];
-          let update:SE|undefined,back:State|undefined;
-          if(backs.length){
-            const updateState=joinStates(state,backs);
-            const updateFlow:Flow={env:cloneEnv(updateState.env),heap:cloneHeap(updateState.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
-            if(n.update)update=expression(n.update,updateFlow);
-            back=stateOf(updateFlow);
-          }else if(n.update){
-            const unreachable:Flow={env:cloneEnv(state.env),heap:cloneHeap(state.heap),reachable:true,returns:[],loopDepth:f.loopDepth+1};
-            update=expression(n.update,unreachable);
+        const entry = stateOf(f); let head = stateOf(f);
+        const run = (state: State) => {
+          const iter = fromState(state, f.loopDepth + 1);
+          let condition: SE | undefined, conditionExit: State | undefined;
+          if (n.condition) { condition = expression(n.condition, iter); conditionExit = stateOf(iter); }
+          const body = statement(n.body, iter) ?? emptyStatement(n.body);
+          const continues = iter.abrupt.filter(x => x.kind === 'continue');
+          const breaks = iter.abrupt.filter(x => x.kind === 'break');
+          const outer = iter.abrupt.filter(x => x.kind === 'return' || x.kind === 'throw');
+          const backs = [...(iter.reachable ? [stateOf(iter)] : []), ...continues.map(x => x.state)];
+          let update: SE | undefined, back: State | undefined, updateAbrupt: AbruptState[] = [];
+          if (backs.length) {
+            const updateFlow = fromState(joinStates(state, backs), f.loopDepth + 1);
+            if (n.update) update = expression(n.update, updateFlow);
+            back = stateOf(updateFlow);
+            updateAbrupt = updateFlow.abrupt.filter(x => x.kind === 'throw' || x.kind === 'return');
+          } else if (n.update) {
+            const unreachable = fromState(state, f.loopDepth + 1);
+            update = expression(n.update, unreachable);
           }
-          return {condition,conditionExit,body,update,back,breaks:control.breaks,returns:iter.returns};
+          return { condition, conditionExit, body, update, back, breaks, outer: [...outer, ...updateAbrupt] };
         };
-        for(let i=0;i<MAX_LOOP_FIXPOINT;i++){
-          const pass=run(head),next=widen(entry,pass.back?[pass.back]:[]);
-          if(sameState(head,next))break;
-          head=next;if(i===MAX_LOOP_FIXPOINT-1)fail('E_ANALYSIS','Loop fixed point did not converge.',n.span);
+        for (let i = 0; i < MAX_LOOP_FIXPOINT; i++) {
+          const pass = run(head), next = widen(entry, pass.back ? [pass.back] : []);
+          if (sameState(head, next)) break;
+          head = next; if (i === MAX_LOOP_FIXPOINT - 1) fail('E_ANALYSIS', 'Loop fixed point did not converge.', n.span);
         }
-        const final=run(head);f.returns.push(...final.returns);
-        const exits=[...(final.conditionExit?[final.conditionExit]:[]),...final.breaks];
-        if(exits.length){applyState(f,joinStates(entry,exits));f.reachable=true}else f.reachable=false;
-        return {...n,initializer,condition:final.condition,update:final.update,body:final.body};
+        const final = run(head); f.abrupt.push(...final.outer);
+        const exits = [...(final.conditionExit ? [final.conditionExit] : []), ...final.breaks.map(x => x.state)];
+        if (exits.length) { applyState(f, joinStates(entry, exits)); f.reachable = true; } else f.reachable = false;
+        return { ...n, initializer, condition: final.condition, update: final.update, body: final.body };
+      }
+      case 'try': {
+        const entry = stateOf(f), tryFlow = fromState(entry, f.loopDepth);
+        const body = statement(n.body, tryFlow) as SS & { kind: 'block' };
+        const thrown = tryFlow.abrupt.filter(x => x.kind === 'throw');
+        const pending: AbruptState[] = tryFlow.abrupt.filter(x => x.kind !== 'throw');
+        const normalStates: State[] = tryFlow.reachable ? [stateOf(tryFlow)] : [];
+        let catchClause: SemanticCatchClause | undefined;
+        if (n.catchClause && thrown.length) {
+          const catchStart = joinStates(entry, thrown.map(x => x.state));
+          const catchFlow = fromState(catchStart, f.loopDepth);
+          let binding: Binding | undefined;
+          if (n.catchClause.binding) {
+            binding = bindings.declarations.get(n.catchClause.binding.id)!;
+            const values = thrown.map(x => x.value).filter((x): x is ValueInfo => x !== undefined);
+            catchFlow.env.set(binding.id, unionValue(...values));
+          }
+          const catchBody = statement(n.catchClause.body, catchFlow) as SS & { kind: 'block' };
+          catchClause = { id: n.catchClause.id, span: n.catchClause.span, ...(binding ? { binding } : {}), body: catchBody };
+          pending.push(...catchFlow.abrupt);
+          if (catchFlow.reachable) normalStates.push(stateOf(catchFlow));
+        } else if (!n.catchClause) {
+          pending.push(...thrown);
+        }
+        if (!n.finallyBlock) {
+          f.abrupt.push(...pending);
+          if (normalStates.length) { applyState(f, joinStates(entry, normalStates)); f.reachable = true; } else f.reachable = false;
+          return { id: n.id, span: n.span, kind: 'try', body, ...(catchClause ? { catchClause } : {}),
+            pendingAbruptKinds: kinds(pending), finallyAbruptKinds: [], finallyCanCompleteNormally: true };
+        }
+        const allInputs = [...normalStates, ...pending.map(x => x.state)];
+        const finallyInput = allInputs.length ? joinStates(entry, allInputs) : entry;
+        const finallyFlow = fromState(finallyInput, f.loopDepth);
+        const finallyBlock = statement(n.finallyBlock, finallyFlow) as SS & { kind: 'block' };
+        const finalAbrupt = [...finallyFlow.abrupt];
+        f.abrupt.push(...finalAbrupt);
+        if (finallyFlow.reachable) {
+          const finalState = stateOf(finallyFlow);
+          for (const item of pending) f.abrupt.push({ ...item, state: finalState });
+          if (normalStates.length) { applyState(f, finalState); f.reachable = true; } else f.reachable = false;
+        } else f.reachable = false;
+        return { id: n.id, span: n.span, kind: 'try', body, ...(catchClause ? { catchClause } : {}), finallyBlock,
+          pendingAbruptKinds: kinds(pending), finallyAbruptKinds: kinds(finalAbrupt),
+          finallyCanCompleteNormally: finallyFlow.reachable };
       }
     }
   }
 
-  return { body: statements(program.body, { env: new Map(), heap: new Map(), reachable: true, returns: [], loopDepth: 0 }), functions: instances };
+  return { body: statements(program.body, { env: new Map(), heap: new Map(), reachable: true, abrupt: [], loopDepth: 0 }), functions: instances };
 }

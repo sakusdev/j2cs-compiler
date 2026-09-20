@@ -1,7 +1,7 @@
 import { fail } from '../diagnostics/index.js';
 import type { Expr, FunctionDeclaration, Node, Program, Statement } from '../parser/ast.js';
 export interface Binding {
-  id: number; name: string; kind: 'const' | 'let' | 'parameter' | 'function' | 'intrinsic';
+  id: number; name: string; kind: 'const' | 'let' | 'parameter' | 'catch' | 'function' | 'intrinsic';
   owner: number; declaration?: Node; function?: FunctionDeclaration;
 }
 export interface Bindings {
@@ -33,7 +33,7 @@ export function resolveBindings(program: Program): Bindings {
   }
   function writable(n: Expr & { kind: 'identifier' }, scope: Scope, span: Node['span']): Binding {
     const b = resolve(n, scope);
-    if (b.kind !== 'let' && b.kind !== 'parameter') fail('E_IMMUTABLE_WRITE', `Assignment to '${b.name}' is unsupported (${b.kind}).`, span);
+    if (b.kind !== 'let' && b.kind !== 'parameter' && b.kind !== 'catch') fail('E_IMMUTABLE_WRITE', `Assignment to '${b.name}' is unsupported (${b.kind}).`, span);
     return b;
   }
   function expr(n: Expr, s: Scope, use: 'value' | 'callee' | 'receiver' = 'value'): void {
@@ -104,6 +104,17 @@ export function resolveBindings(program: Program): Bindings {
       case 'return':
         if (s.owner === 0) fail('E_RETURN_CONTEXT', 'return outside a function is unsupported.', n.span);
         if (n.value) expr(n.value, s); return;
+      case 'throw': expr(n.value, s); return;
+      case 'try': {
+        visit(n.body, s, loopDepth);
+        if (n.catchClause) {
+          const catchScope: Scope = { parent: s, owner: s.owner, names: new Map() };
+          if (n.catchClause.binding) declare(catchScope, n.catchClause.binding, n.catchClause.binding.name, 'catch');
+          body(n.catchClause.body.body, catchScope, false, loopDepth);
+        }
+        if (n.finallyBlock) visit(n.finallyBlock, s, loopDepth);
+        return;
+      }
       case 'function': {
         const fs: Scope = { parent: s, owner: n.id + 1, names: new Map() };
         for (const p of n.params) declare(fs, p, p.name, 'parameter');

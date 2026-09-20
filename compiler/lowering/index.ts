@@ -20,6 +20,30 @@ const stringLiteral = (value: string): CE => ({ kind: 'literal', repr: 'string',
 const numberLiteral = (value: number): CE => ({ kind: 'literal', repr: 'number', value });
 export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgram {
   const trace: Trace[] = [], contracts = new Set<string>();
+  interface Context { insideFunction: boolean; insideLoop: boolean }
+  const rootContext: Context = { insideFunction: false, insideLoop: false };
+  function completionFacts(): ReturnType<typeof programFacts> {
+    return programFacts().prove('completion.representation', 'JsCompletionSignal',
+      'All admitted abrupt completions use the explicit JsCompletionSignal carrier');
+  }
+  function throwFacts(): ReturnType<typeof programFacts> {
+    return programFacts()
+      .prove('control.context', 'synchronous ECMAScript control flow', 'Async/generator functions are rejected by this lane')
+      .prove('control.sync', true, 'Only synchronous ECMAScript control flow reaches this lowering')
+      .prove('throw.valueArbitrary', true, 'Thrown values remain tagged JsValue values without coercion')
+      .prove('throw.expressionMayAbrupt', true, 'Throw operand is evaluated exactly once before wrapping')
+      .prove('throw.wrapper', 'JsException', 'Throw completion uses the identity-preserving JsException wrapper');
+  }
+  function containsFinally(s: SS): boolean {
+    switch (s.kind) {
+      case 'try': return !!s.finallyBlock || containsFinally(s.body)
+        || !!s.catchClause && containsFinally(s.catchClause.body);
+      case 'block': return s.body.some(containsFinally);
+      case 'if': return containsFinally(s.then) || !!s.otherwise && containsFinally(s.otherwise);
+      case 'while': case 'doWhile': case 'for': return containsFinally(s.body);
+      default: return false;
+    }
+  }
   function select(selector: Selector, facts: FactModel, span: Span): string {
     const result = index.select(selector, facts), chosen = result.selected;
     if (!chosen || chosen.loaded.rule.strategy === 'unsupported') {
@@ -158,6 +182,11 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
         }
         if (typeof e.target === 'number') {
           select({ kind: 'call.function' }, facts, e.span);
+          if (e.throwTypes.length) {
+            select({ kind: 'call.function.throw' }, programFacts()
+              .prove('callee.kind', 'ordinary synchronous ECMAScript function', 'Resolved ordinary function specialization')
+              .prove('callee.mayThrow', true, 'Function summary contains a Throw completion'), e.span);
+          }
           return call(`F${e.target}`, e.args.map(expression));
         }
         const op = select({ kind: 'call.intrinsic', intrinsic: e.target }, facts, e.span);
@@ -181,6 +210,7 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
           default: return fail('E_LOWERING', `Unimplemented intrinsic lowering ${op}.`, e.span);
         }
     }
+    return fail('E_LOWERING', 'Unimplemented semantic expression.', (e as SE).span);
   }
   function condition(e: SE): CE {
     if (exactly(e.types, 'Boolean')) { contracts.add('core.boolean-condition'); return unbox(expression(e), 'boolean'); }
@@ -188,35 +218,96 @@ export function lower(program: SemanticProgram, index: RuleIndex): LoweredProgra
     select({ kind: 'condition' }, facts, e.span);
     return call('JsValue.IsTruthy', [expression(e)], 'boolean');
   }
-  function statement(s: SS): CS {
+  function statement(s: SS, context: Context = rootContext): CS {
     switch (s.kind) {
       case 'variable': contracts.add('core.lexical-initialization'); return { kind: 'variable', name: variable(s.binding), initializer: expression(s.initializer) };
       case 'expression': return { kind: 'expression', expression: expression(s.expression) };
-      case 'block': return { kind: 'block', body: s.body.map(statement) };
-      case 'if': return { kind: 'if', condition: condition(s.condition), then: statement(s.then), otherwise: s.otherwise && statement(s.otherwise) };
-      case 'while': contracts.add('core.loop.while'); return { kind: 'while', condition: condition(s.condition), body: statement(s.body) };
-      case 'doWhile': contracts.add('core.loop.do-while'); return { kind: 'doWhile', body: statement(s.body), condition: condition(s.condition) };
+      case 'block': return { kind: 'block', body: s.body.map(x => statement(x, context)) };
+      case 'if': return { kind: 'if', condition: condition(s.condition), then: statement(s.then, context),
+        otherwise: s.otherwise && statement(s.otherwise, context) };
+      case 'while': contracts.add('core.loop.while'); return { kind: 'while', condition: condition(s.condition),
+        body: statement(s.body, { ...context, insideLoop: true }) };
+      case 'doWhile': contracts.add('core.loop.do-while'); return { kind: 'doWhile',
+        body: statement(s.body, { ...context, insideLoop: true }), condition: condition(s.condition) };
       case 'for': {
         contracts.add('core.loop.for');
-        const loop: CS = { kind: 'for', condition: s.condition && condition(s.condition), update: s.update && expression(s.update), body: statement(s.body) };
+        const loop: CS = { kind: 'for', condition: s.condition && condition(s.condition), update: s.update && expression(s.update),
+          body: statement(s.body, { ...context, insideLoop: true }) };
         if (!s.initializer) return loop;
         const init = s.initializer.kind === 'variables'
-          ? s.initializer.declarations.map(statement)
+          ? s.initializer.declarations.map(x => statement(x, context))
           : [{ kind: 'expression' as const, expression: expression(s.initializer.expression) }];
         return { kind: 'block', body: [...init, loop] };
       }
-      case 'break': contracts.add('core.loop.break'); return { kind: 'break' };
-      case 'continue': contracts.add('core.loop.continue'); return { kind: 'continue' };
+      case 'break':
+        select({ kind: 'completion' }, completionFacts(), s.span);
+        return { kind: 'throw', value: call('JsCompletion.Break', []) };
+      case 'continue':
+        select({ kind: 'completion' }, completionFacts(), s.span);
+        return { kind: 'throw', value: call('JsCompletion.Continue', []) };
       case 'return':
+        select({ kind: 'completion' }, completionFacts(), s.span);
         if (s.value.kind === 'literal' && s.value.value === undefined) {
           select({ kind: 'return.undefined' }, programFacts().prove('return.representation', 'value', 'Observable tagged return convention'), s.span);
         } else contracts.add('core.return-value');
-        return { kind: 'return', value: expression(s.value) };
+        return { kind: 'throw', value: call('JsCompletion.Return', [expression(s.value)]) };
+      case 'throw':
+        select({ kind: 'completion' }, completionFacts(), s.span);
+        select({ kind: 'throw.value' }, throwFacts(), s.span);
+        select({ kind: 'throw.expression' }, throwFacts(), s.span);
+        return { kind: 'throw', value: call('JsException.Wrap', [expression(s.value)]) };
+      case 'try': {
+        if (!s.catchClause && !s.finallyBlock) return statement(s.body, context);
+        const facts = programFacts()
+          .prove('control.sync', true, 'Only synchronous try statements are admitted')
+          .prove('try.hasCatch', !!s.catchClause, 'Normalized try statement shape')
+          .prove('try.hasFinally', !!s.finallyBlock, 'Normalized try statement shape')
+          .prove('try.bodyMayAbrupt', !!s.catchClause || s.pendingAbruptKinds.length > 0,
+            'Completion analysis records all abrupt exits from the protected body')
+          .prove('throw.wrapper', 'JsException', 'Throw completion uses the identity-preserving JsException wrapper');
+        if (s.catchClause) {
+          if (s.catchClause.binding) {
+            const catchFacts = new Map(facts)
+              .set('catch.parameterKind', { value: 'BindingIdentifier', evidence: 'Parser admits only identifier catch bindings' })
+              .set('catch.parameterPresent', { value: true, evidence: 'Normalized catch clause has a lexical binding' })
+              .set('catch.lexicalScopeObservable', { value: true, evidence: 'Binder allocates a fresh catch lexical scope' });
+            select({ kind: 'try.catch.binding' }, catchFacts, s.span);
+            select({ kind: 'try.catch.scope' }, catchFacts, s.span);
+          } else {
+            select({ kind: 'try.catch.omitted' }, new Map(facts)
+              .set('catch.binding', { value: 'omitted', evidence: 'Normalized catch clause omits its binding' }), s.span);
+          }
+          select({ kind: 'try.catch.abrupt' }, facts, s.span);
+        }
+        if (s.finallyBlock) {
+          const finalFacts = new Map(facts)
+            .set('finally.normalOnly', { value: s.finallyCanCompleteNormally && s.finallyAbruptKinds.length === 0,
+              evidence: 'Completion analysis of the finally block' })
+            .set('finally.mayAbrupt', { value: s.finallyAbruptKinds.length > 0,
+              evidence: 'Completion analysis of the finally block' })
+            .set('control.insideFunction', { value: context.insideFunction, evidence: 'Lowering context' })
+            .set('control.insideIteration', { value: context.insideLoop, evidence: 'Lowering context' })
+            .set('try.loopControlMayCross', { value: s.pendingAbruptKinds.some(k => k === 'break' || k === 'continue'),
+              evidence: 'Pending completion kinds crossing finally' })
+            .set('try.nestedFinally', { value: containsFinally(s.body)
+              || !!s.catchClause && containsFinally(s.catchClause.body), evidence: 'Nested semantic try/finally scan' });
+          select({ kind: 'try.finally' }, finalFacts, s.span);
+          if (s.catchClause) select({ kind: 'try.catch-finally' }, finalFacts, s.span);
+          if (s.pendingAbruptKinds.includes('return')) select({ kind: 'try.finally.return' }, finalFacts, s.span);
+          if (s.pendingAbruptKinds.some(k => k === 'break' || k === 'continue')) select({ kind: 'try.finally.loop' }, finalFacts, s.span);
+          if (finalFacts.get('try.nestedFinally')?.value === true) select({ kind: 'try.finally.nested' }, finalFacts, s.span);
+        }
+        return { kind: 'try', body: statement(s.body, context),
+          ...(s.catchClause ? { catchClause: { ...(s.catchClause.binding ? { binding: variable(s.catchClause.binding) } : {}),
+            body: statement(s.catchClause.body, context) } } : {}),
+          ...(s.finallyBlock ? { finallyBlock: statement(s.finallyBlock, context) } : {}) };
+      }
     }
   }
   const functions = program.functions.map(fn => {
     select({ kind: 'function' }, declarationFacts(fn), fn.span);
-    return { name: `F${fn.instanceId}`, params: fn.params.map(variable), body: fn.body.map(statement) };
+    const context: Context = { insideFunction: true, insideLoop: false };
+    return { name: `F${fn.instanceId}`, params: fn.params.map(variable), body: fn.body.map(x => statement(x, context)) };
   });
-  return { ir: { functions, body: program.body.map(statement) }, trace, structuralContracts: [...contracts].sort() };
+  return { ir: { functions, body: program.body.map(x => statement(x, rootContext)) }, trace, structuralContracts: [...contracts].sort() };
 }

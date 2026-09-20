@@ -161,6 +161,30 @@ export function parse(source: string, file = 'input.js'): Program {
       return [{ ...m, kind: 'continue' }];
     }
     if (ts.isReturnStatement(n)) return [{ ...m, kind: 'return', value: n.expression && expr(n.expression) }];
+    if (ts.isThrowStatement(n)) {
+      if (!n.expression) unsupported(n, 'Throw without an expression');
+      return [{ ...m, kind: 'throw', value: expr(n.expression) }];
+    }
+    if (ts.isTryStatement(n)) {
+      const body = statement(n.tryBlock)[0] as Statement & { kind: 'block' };
+      let catchClause;
+      if (n.catchClause) {
+        const declaration = n.catchClause.variableDeclaration;
+        let binding;
+        if (declaration) {
+          if (!ts.isIdentifier(declaration.name) || declaration.initializer || declaration.exclamationToken || declaration.type)
+            unsupported(declaration, 'Catch destructuring/type annotation');
+          binding = { ...meta(declaration), name: declaration.name.text };
+        }
+        catchClause = {
+          ...meta(n.catchClause),
+          ...(binding ? { binding } : {}),
+          body: statement(n.catchClause.block)[0] as Statement & { kind: 'block' },
+        };
+      }
+      const finallyBlock = n.finallyBlock && statement(n.finallyBlock)[0] as Statement & { kind: 'block' };
+      return [{ ...m, kind: 'try', body, ...(catchClause ? { catchClause } : {}), ...(finallyBlock ? { finallyBlock } : {}) }];
+    }
     if (ts.isFunctionDeclaration(n)) {
       if (!n.name || !n.body || n.asteriskToken || n.modifiers?.length || n.typeParameters?.length)
         unsupported(n, 'Async/generator/ambient/exported/generic function');
